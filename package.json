@@ -1,0 +1,48 @@
+{
+  "name": "x509js",
+  "description": "Simple X509 certificate tools for Node.js",
+  "authors": [
+    "Yan Qing <admin@zensh.com>"
+  ],
+  "version": "0.1.0",
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:fidm/x509js.git"
+  },
+  "homepage": "https://github.com/fidm/x509js",
+  "engines": {
+    "node": ">= 8"
+  },
+  "keywords": [
+    "x509",
+    "certificate",
+    "tls",
+    "asn1",
+    "pki"
+  ],
+  "dependencies": {
+    "node-forge": "^0.7.5"
+  },
+  "devDependencies": {
+    "@types/node": "^10.0.3",
+    "tman": "^1.7.4",
+    "ts-node": "^5.0.1",
+    "tslint": "^5.10.0",
+    "tslint-eslint-rules": "^5.1.0",
+    "typescript": "^2.8.3"
+  },
+  "scripts": {
+    "test": "tman -r ts-node/register 'test/**/*.ts'",
+    "lint": "tslint -p tsconfig.json -t stylish 'src/**/*.ts' 'test/**/*.ts'",
+    "build": "rm -rf build && tsc"
+  },
+  "files": [
+    "build",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md"
+  ]
+}

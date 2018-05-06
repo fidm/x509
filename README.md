@@ -1,2 +1,2 @@
 # x509
-X509 certificate for Node.js
+Simple X509 certificate tools for Node.js
