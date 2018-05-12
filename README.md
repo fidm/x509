@@ -5,7 +5,7 @@ X509 certificate tools for Node.js, includes PEM, ASN1 with DER.
 
 ```js
 const fs = require('fs')
-const { PEM, ASN1 } = require('x509js')
+const { PEM, ASN1 } = require('@fidm/x509')
 
 const crtData = fs.readFileSync('./test/cert/github.crt')
 const blocks = PEM.parse(crtData)

@@ -1,5 +1,5 @@
 {
-  "name": "x509js",
+  "name": "@fidm/x509",
   "description": "X509 certificate tools for Node.js, includes PEM, ASN1 with DER.",
   "authors": [
     "Yan Qing <admin@zensh.com>"
@@ -10,9 +10,9 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git@github.com:fidm/x509js.git"
+    "url": "git@github.com:fidm/x509.git"
   },
-  "homepage": "https://github.com/fidm/x509js",
+  "homepage": "https://github.com/fidm/x509",
   "engines": {
     "node": ">= 8"
   },
