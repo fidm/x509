@@ -1,6 +1,6 @@
 {
   "name": "x509js",
-  "description": "Simple X509 certificate tools for Node.js",
+  "description": "X509 certificate tools for Node.js, includes PEM, ASN1 with DER.",
   "authors": [
     "Yan Qing <admin@zensh.com>"
   ],
@@ -21,17 +21,16 @@
     "certificate",
     "tls",
     "asn1",
+    "pem",
     "pki"
   ],
-  "dependencies": {
-    "node-forge": "^0.7.5"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@types/node": "^10.0.3",
     "tman": "^1.7.4",
     "ts-node": "^5.0.1",
     "tslint": "^5.10.0",
-    "tslint-eslint-rules": "^5.1.0",
+    "tslint-eslint-rules": "^5.2.0",
     "typescript": "^2.8.3"
   },
   "scripts": {

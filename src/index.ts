@@ -4,3 +4,4 @@
 // **License:** MIT
 
 export { ASN1 } from './asn1'
+export { PEM } from './pem'

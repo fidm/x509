@@ -4,7 +4,20 @@
 // **License:** MIT
 
 import { inspect } from 'util'
-import { BufferVisitor, getOID } from './common'
+import { BufferVisitor, getOID, getOIDName } from './common'
+
+export interface Template {
+  name?: string
+  class: Class
+  tag: Tag
+  optional?: boolean
+  capture?: string
+  value?: Template[]
+}
+
+export interface Captures {
+  [index: string]: ASN1
+}
 
 // ASN.1 classes.
 export enum Class {
@@ -41,6 +54,39 @@ export enum Tag {
   GENERALSTRING = 27,
 }
 
+export class BitString {
+  buf: Buffer
+  bitLen: number
+  constructor (buf: Buffer, bitLen: number) {
+    this.buf = buf
+    this.bitLen = bitLen
+  }
+
+  at (i: number): number {
+    if (i < 0 || i >= this.bitLen || !Number.isInteger(i)) {
+      return 0
+    }
+    const x = Math.floor(i / 8)
+    const y = 7 - i % 8
+    return (this.buf[x] >> y) & 1
+  }
+
+  rightAlign (): Buffer {
+    const shift = 8 - (this.bitLen % 8)
+    if (shift === 8 || this.buf.length === 0) {
+      return this.buf
+    }
+
+    const buf = Buffer.alloc(this.buf.length)
+    buf[0] = this.buf[0] >> shift
+    for (let i = 1; i < this.buf.length; i++) {
+      buf[i] = this.buf[i - 1] << (8 - shift)
+      buf[i] |= this.buf[i] >> shift
+    }
+    return buf
+  }
+}
+
 // Implements parsing of DER-encoded ASN.1 data structures,
 // as defined in ITU-T Rec X.690.
 //
@@ -58,9 +104,13 @@ export enum Tag {
 // everything by any means.
 export class ASN1 {
 
+  // DER Encoding of ASN.1 Types
+  // https://msdn.microsoft.com/en-us/library/windows/desktop/bb540792(v=vs.85).aspx
   // Tag.BOOLEAN
   static Bool (val: boolean): ASN1 {
-    return new ASN1(Class.UNIVERSAL, Tag.BOOLEAN, Buffer.from([val ? 0xff: 0x0]))
+    const asn1 = new ASN1(Class.UNIVERSAL, Tag.BOOLEAN, Buffer.from([val ? 0xff : 0x0]))
+    asn1._value = val
+    return asn1
   }
 
   static parseBool (buf: Buffer): boolean {
@@ -77,13 +127,19 @@ export class ASN1 {
     }
   }
 
-  // Tag.BOOLEAN
-  static Integer (num: number): ASN1 {
+  // Tag.INTEGER
+  static Integer (num: number | Buffer): ASN1 {
+    if (num instanceof Buffer) {
+      const asn = new ASN1(Class.UNIVERSAL, Tag.INTEGER, num)
+      asn._value = '0x' + num.toString('hex')
+      return asn
+    }
+
     if (!Number.isSafeInteger(num)) {
       throw new Error('ASN1 syntax error: invalid integer')
     }
     let buf
-    if(num >= -0x80 && num < 0x80) {
+    if (num >= -0x80 && num < 0x80) {
       buf = Buffer.alloc(1)
       buf.writeInt8(num, 0)
     } else if (num >= -0x8000 && num < 0x8000) {
@@ -102,14 +158,21 @@ export class ASN1 {
       buf = Buffer.alloc(6)
       buf.writeIntBE(num, 0, 6)
     } else {
-      throw new Error('ASN1 syntax error: invalid integer')
+      throw new Error('ASN1 syntax error: invalid Integer')
     }
-    return new ASN1(Class.UNIVERSAL, Tag.INTEGER, buf)
+    const asn1 = new ASN1(Class.UNIVERSAL, Tag.INTEGER, buf)
+    asn1._value = num
+    return asn1
   }
 
-  static parseInteger (buf: Buffer): number {
-    if(buf.length === 0 || buf.length > 6) {
-      throw new Error('ASN1 syntax error: invalid integer')
+  static parseInteger (buf: Buffer): number | string {
+    if (buf.length === 0) {
+      throw new Error('ASN1 syntax error: invalid Integer')
+    }
+    // some INTEGER will be 16 bytes, 32 bytes or others.
+    // CertificateSerialNumber ::= INTEGER (>= 16 bytes)
+    if (buf.length > 6) {
+      return '0x' + buf.toString('hex')
     }
     return buf.readIntBE(0, buf.length)
   }
@@ -118,15 +181,30 @@ export class ASN1 {
   // BitString is the structure to use when you want an ASN.1 BIT STRING type. A
   // bit string is padded up to the nearest byte in memory and the number of
   // valid bits is recorded. Padding bits will be zero.
-  // TODO
+  static parseBitString (buf: Buffer): BitString {
+    if (buf.length === 0) {
+      throw new Error('ASN1 syntax error: invalid BitString')
+    }
+
+    const paddingBits = buf[0]
+    if (paddingBits > 7 ||
+      buf.length === 1 && paddingBits > 0 ||
+      (buf[buf.length - 1] & ((1 << buf[0]) - 1)) !== 0) {
+      throw new Error('ASN1 syntax error: invalid padding bits in BIT STRING')
+    }
+
+    return new BitString(buf.slice(1), (buf.length - 1) * 8 - paddingBits)
+  }
 
   // Tag.NULL
   static Null (): ASN1 {
-    return new ASN1(Class.UNIVERSAL, Tag.NULL, Buffer.alloc(1))
+    const asn1 = new ASN1(Class.UNIVERSAL, Tag.NULL, Buffer.alloc(0))
+    asn1._value = null
+    return asn1
   }
 
   static parseNull (buf: Buffer): null {
-    if(buf.length !== 1 || buf.readInt8(0) !== 0) {
+    if (buf.length !== 0) {
       throw new Error('ASN1 syntax error: invalid null')
     }
     return null
@@ -147,8 +225,11 @@ export class ASN1 {
     bytes.push(40 * parseInt(values[0], 10) + parseInt(values[1], 10))
     // other bytes are each value in base 128 with 8th bit set except for
     // the last byte for each value
-    let last, valueBytes, value, b
-    for(var i = 2; i < values.length; ++i) {
+    let last
+    let valueBytes
+    let value
+    let b
+    for (let i = 2; i < values.length; ++i) {
       // produce value bytes in reverse because we don't know how many
       // bytes it will take to store the value
       last = true
@@ -158,7 +239,7 @@ export class ASN1 {
         b = value & 0x7F
         value = value >>> 7
         // if value is not last, then turn on 8th bit
-        if(!last) {
+        if (!last) {
           b |= 0x80
         }
         valueBytes.push(b)
@@ -171,7 +252,9 @@ export class ASN1 {
       }
     }
 
-    return new ASN1(Class.UNIVERSAL, Tag.OID, Buffer.from(bytes))
+    const asn1 = new ASN1(Class.UNIVERSAL, Tag.OID, Buffer.from(bytes))
+    asn1._value = oid
+    return asn1
   }
 
   static parseOID (buf: Buffer): string {
@@ -186,7 +269,7 @@ export class ASN1 {
       b = buf[i]
       value = value << 7
       // not the last byte for the value
-      if (b & 0x80) {
+      if ((b & 0x80) === 0x80) {
         value += b & 0x7F
       } else {
         // last byte
@@ -204,7 +287,9 @@ export class ASN1 {
 
   // Tag.UTF8
   static UTF8 (str: string): ASN1 {
-    return new ASN1(Class.UNIVERSAL, Tag.UTF8, Buffer.from(str, 'utf8'))
+    const asn1 = new ASN1(Class.UNIVERSAL, Tag.UTF8, Buffer.from(str, 'utf8'))
+    asn1._value = str
+    return asn1
   }
 
   static parseUTF8 (buf: Buffer): string {
@@ -213,25 +298,28 @@ export class ASN1 {
 
   // Tag.NUMERICSTRING
   static NumericString (str: string): ASN1 {
-    if (!NumericReg.test(str)) {
+    if (!isNumericString(str)) {
       throw new Error('ASN1 syntax error: invalid NumericString')
     }
-    return new ASN1(Class.UNIVERSAL, Tag.NUMERICSTRING, Buffer.from(str, 'utf8'))
+    const asn1 = new ASN1(Class.UNIVERSAL, Tag.NUMERICSTRING, Buffer.from(str, 'utf8'))
+    asn1._value = str
+    return asn1
   }
 
   static parseNumericString (buf: Buffer): string {
-    for (const val of buf.values()) {
-      if (!isNumeric(val)) {
-        throw new Error('ASN1 syntax error: invalid NumericString')
-      }
+    const str = buf.toString('utf8')
+    if (!isNumericString(str)) {
+      throw new Error('ASN1 syntax error: invalid NumericString')
     }
-    return buf.toString('utf8')
+    return str
   }
 
   // Tag.PRINTABLESTRING
   static PrintableString (str: string): ASN1 {
     // TODO, validate
-    return new ASN1(Class.UNIVERSAL, Tag.PRINTABLESTRING, Buffer.from(str, 'utf8'))
+    const asn1 = new ASN1(Class.UNIVERSAL, Tag.PRINTABLESTRING, Buffer.from(str, 'utf8'))
+    asn1._value = str
+    return asn1
   }
 
   static parsePrintableString (buf: Buffer): string {
@@ -241,19 +329,28 @@ export class ASN1 {
 
   // Tag.IA5STRING, ASN.1 IA5String (ASCII string)
   static IA5String (str: string): ASN1 {
-    // TODO, validate
-    return new ASN1(Class.UNIVERSAL, Tag.IA5STRING, Buffer.from(str, 'utf8'))
+    if (!isIA5String(str)) {
+      throw new Error('ASN1 syntax error: invalid IA5String')
+    }
+    const asn1 = new ASN1(Class.UNIVERSAL, Tag.IA5STRING, Buffer.from(str, 'utf8'))
+    asn1._value = str
+    return asn1
   }
 
   static parseIA5String (buf: Buffer): string {
-    // TODO, validate
-    return buf.toString('utf8')
+    const str = buf.toString('utf8')
+    if (!isIA5String(str)) {
+      throw new Error('ASN1 syntax error: invalid IA5String')
+    }
+    return str
   }
 
   // Tag.T61STRING, ASN.1 T61String (8-bit clean string)
   static T61String (str: string): ASN1 {
     // TODO, validate
-    return new ASN1(Class.UNIVERSAL, Tag.T61STRING, Buffer.from(str, 'utf8'))
+    const asn1 = new ASN1(Class.UNIVERSAL, Tag.T61STRING, Buffer.from(str, 'utf8'))
+    asn1._value = str
+    return asn1
   }
 
   static parseT61String (buf: Buffer): string {
@@ -264,7 +361,9 @@ export class ASN1 {
   // Tag.GENERALSTRING, ASN.1 GeneralString (specified in ISO-2022/ECMA-35)
   static GeneralString (str: string): ASN1 {
     // TODO, validate
-    return new ASN1(Class.UNIVERSAL, Tag.GENERALSTRING, Buffer.from(str, 'utf8'))
+    const asn1 = new ASN1(Class.UNIVERSAL, Tag.GENERALSTRING, Buffer.from(str, 'utf8'))
+    asn1._value = str
+    return asn1
   }
 
   static parseGeneralString (buf: Buffer): string {
@@ -288,14 +387,16 @@ export class ASN1 {
     format.push('' + date.getUTCSeconds())
 
     // ensure 2 digits are used for each format entry
-    for (let i = 0; i < format.length; ++i) {
-      if (format[i].length < 2) {
+    for (const s of format) {
+      if (s.length < 2) {
         rval += '0'
       }
-      rval += format[i]
+      rval += s
     }
     rval += 'Z'
-    return new ASN1(Class.UNIVERSAL, Tag.UTCTIME, Buffer.from(rval, 'utf8'))
+    const asn1 = new ASN1(Class.UNIVERSAL, Tag.UTCTIME, Buffer.from(rval, 'utf8'))
+    asn1._value = date
+    return asn1
   }
 
   // Note: GeneralizedTime has 4 digits for the year and is used for X.509
@@ -328,10 +429,10 @@ export class ASN1 {
     // if YY >= 50 use 19xx, if YY < 50 use 20xx
     let year = parseInt(utc.substr(0, 2), 10)
     year = (year >= 50) ? 1900 + year : 2000 + year
-    let MM = parseInt(utc.substr(2, 2), 10) - 1 // use 0-11 for month
-    let DD = parseInt(utc.substr(4, 2), 10)
-    let hh = parseInt(utc.substr(6, 2), 10)
-    let mm = parseInt(utc.substr(8, 2), 10)
+    const MM = parseInt(utc.substr(2, 2), 10) - 1 // use 0-11 for month
+    const DD = parseInt(utc.substr(4, 2), 10)
+    const hh = parseInt(utc.substr(6, 2), 10)
+    const mm = parseInt(utc.substr(8, 2), 10)
     let ss = 0
 
     let end = 0
@@ -359,15 +460,15 @@ export class ASN1 {
       c = utc.charAt(end)
       if (c === '+' || c === '-') {
         // get hours+minutes offset
-        let hhoffset = parseInt(utc.substr(end + 1, 2), 10)
-        let mmoffset = parseInt(utc.substr(end + 4, 2), 10)
+        const hhoffset = parseInt(utc.substr(end + 1, 2), 10)
+        const mmoffset = parseInt(utc.substr(end + 4, 2), 10)
 
         // calculate offset in milliseconds
         let offset = hhoffset * 60 + mmoffset
         offset *= 60000
 
         // apply offset
-        if(c === '+') {
+        if (c === '+') {
           date.setTime(+date - offset)
         } else {
           date.setTime(+date + offset)
@@ -392,14 +493,16 @@ export class ASN1 {
     format.push('' + date.getUTCSeconds())
 
     // ensure 2 digits are used for each format entry
-    for (var i = 0; i < format.length; ++i) {
-      if(format[i].length < 2) {
+    for (const s of format) {
+      if (s.length < 2) {
         rval += '0'
       }
-      rval += format[i]
+      rval += s
     }
     rval += 'Z'
-    return new ASN1(Class.UNIVERSAL, Tag.GENERALIZEDTIME, Buffer.from(rval, 'utf8'))
+    const asn1 = new ASN1(Class.UNIVERSAL, Tag.GENERALIZEDTIME, Buffer.from(rval, 'utf8'))
+    asn1._value = date
+    return asn1
   }
 
   // Converts a GeneralizedTime value to a date.
@@ -431,12 +534,12 @@ export class ASN1 {
       mm' is the absolute value of the offset from GMT in minutes */
     const date = new Date()
 
-    let YYYY = parseInt(gentime.substr(0, 4), 10)
-    let MM = parseInt(gentime.substr(4, 2), 10) - 1 // use 0-11 for month
-    let DD = parseInt(gentime.substr(6, 2), 10)
-    let hh = parseInt(gentime.substr(8, 2), 10)
-    let mm = parseInt(gentime.substr(10, 2), 10)
-    let ss = parseInt(gentime.substr(12, 2), 10)
+    const YYYY = parseInt(gentime.substr(0, 4), 10)
+    const MM = parseInt(gentime.substr(4, 2), 10) - 1 // use 0-11 for month
+    const DD = parseInt(gentime.substr(6, 2), 10)
+    const hh = parseInt(gentime.substr(8, 2), 10)
+    const mm = parseInt(gentime.substr(10, 2), 10)
+    const ss = parseInt(gentime.substr(12, 2), 10)
     let fff = 0
     let offset = 0
     let isUTC = false
@@ -445,18 +548,19 @@ export class ASN1 {
       isUTC = true
     }
 
-    let end = gentime.length - 5, c = gentime.charAt(end)
+    const end = gentime.length - 5
+    const c = gentime.charAt(end)
     if (c === '+' || c === '-') {
       // get hours+minutes offset
-      let hhoffset = parseInt(gentime.substr(end + 1, 2), 10)
-      let mmoffset = parseInt(gentime.substr(end + 4, 2), 10)
+      const hhoffset = parseInt(gentime.substr(end + 1, 2), 10)
+      const mmoffset = parseInt(gentime.substr(end + 4, 2), 10)
 
       // calculate offset in milliseconds
       offset = hhoffset * 60 + mmoffset
       offset *= 60000
 
       // apply offset
-      if(c === '+') {
+      if (c === '+') {
         offset *= -1
       }
 
@@ -468,7 +572,7 @@ export class ASN1 {
       fff = parseFloat(gentime.substr(14)) * 1000
     }
 
-    if(isUTC) {
+    if (isUTC) {
       date.setUTCFullYear(YYYY, MM, DD)
       date.setUTCHours(hh, mm, ss, fff)
       // apply offset
@@ -481,22 +585,162 @@ export class ASN1 {
     return date
   }
 
-  /**
-   * Parses an asn1 object from a byte buffer in DER format.
-   *
-   * @param bytes the byte buffer to parse from.
-   * @param [options] object with options or boolean strict flag
-   *          [strict] true to be strict when checking value lengths, false to
-   *            allow truncated values (default: true).
-   *
-   * @return the parsed asn1 object.
-   */
-  static fromDER (buf: Buffer, options: any = { strict: true }) {
-    if (options.strict == null) {
-      options.strict = true
+  static Set (objs: ASN1[]): ASN1 {
+    const asn1 = new ASN1(Class.UNIVERSAL, Tag.SET, Buffer.concat(objs.map((obj) => obj.toDER())))
+    asn1._value = objs
+    return asn1
+  }
+
+  static Seq (objs: ASN1[]): ASN1 {
+    const asn1 = new ASN1(Class.UNIVERSAL, Tag.SEQUENCE, Buffer.concat(objs.map((obj) => obj.toDER())))
+    asn1._value = objs
+    return asn1
+  }
+
+  // Parses an asn1 object from a byte buffer in DER format.
+  static fromDER (buf: Buffer, deepParse: boolean = false): ASN1 {
+    return ASN1._fromDER(new BufferVisitor(buf), deepParse)
+  }
+
+  private static _parseCompound (buf: Buffer, deepParse: boolean): ASN1[] {
+    const values = []
+    const len = buf.length
+    const bufv = new BufferVisitor(buf)
+    let readByteLen = 0
+    while (readByteLen < len) {
+      const start = bufv.end
+      values.push(ASN1._fromDER(bufv, deepParse))
+      readByteLen += bufv.end - start
+    }
+    return values
+  }
+
+  // Internal function to parse an asn1 object from a byte buffer in DER format.
+  private static _fromDER (bufv: BufferVisitor, deepParse: boolean): ASN1 {
+    bufv.mustWalk(1, 'Too few bytes to read ASN.1 tag.')
+
+    const b1 = bufv.buf[bufv.start]
+    const tagClass = b1 & 0xc0
+    const tag = b1 & 0x1f
+
+    // value storage
+    const valueLen = getValueLength(bufv)
+    bufv.mustHas(valueLen)
+    if (valueLen === 0 && tag !== Tag.NULL || (valueLen !== 0 && tag === Tag.NULL)) {
+      throw new Error('invalid value length or NULL tag.')
     }
 
-    return fromDER(new BufferVisitor(buf), 0, options)
+    bufv.mustWalk(valueLen)
+    const isCompound = ((b1 & 0x20) === 0x20)
+    const asn1 = new ASN1(tagClass, tag, bufv.buf.slice(bufv.start, bufv.end), isCompound)
+    if (isCompound && deepParse) {
+      asn1._value = ASN1._parseCompound(asn1.bytes, deepParse)
+    }
+
+    return asn1
+  }
+
+  class: Class
+  tag: Tag
+  bytes: Buffer
+  isCompound: boolean
+  private _value: any
+  constructor (tagClass: Class, tag: Tag, data: Buffer, isCompound: boolean = false) {
+    this.class = tagClass
+    this.tag = tag
+    this.bytes = data
+    this.isCompound = isCompound || tag === Tag.SEQUENCE || tag === Tag.SET // SEQUENCE, SET, NONE, others...
+    this._value = undefined
+  }
+
+  get value () {
+    if (this._value === undefined) {
+      this._value = this.valueOf()
+    }
+    return this._value
+  }
+
+  mustCompound (msg: string = 'asn1 object value is not compound'): ASN1[] {
+    if (!this.isCompound || !Array.isArray(this.value)) {
+      throw new Error(msg)
+    }
+    return this.value as ASN1[]
+  }
+
+  equals (obj: ASN1): boolean {
+    if (!(obj instanceof ASN1)) {
+      return false
+    }
+    if (this.class !== obj.class || this.tag !== obj.tag || this.isCompound !== obj.isCompound) {
+      return false
+    }
+    if (!this.bytes.equals(obj.bytes)) {
+      return false
+    }
+    return true
+  }
+
+  // Converts the given asn1 object to a buffer of bytes in DER format.
+  toDER (): Buffer {
+    // build the first byte
+    let b1 = this.class | this.tag
+    if (this.isCompound) {
+      b1 |= 0x20
+    }
+
+    const valueLenBytes = getValueLengthByte(this.bytes.length)
+    const buf = Buffer.allocUnsafe(2 + valueLenBytes + this.bytes.length)
+    buf.writeInt8(b1, 0)
+    if (valueLenBytes === 0) {
+      buf.writeUInt8(this.bytes.length, 1)
+      this.bytes.copy(buf, 2)
+    } else {
+      buf.writeUInt8(valueLenBytes, 1)
+      buf.writeUIntBE(this.bytes.length, 2, valueLenBytes)
+      this.bytes.copy(buf, 2 + valueLenBytes)
+    }
+
+    return buf
+  }
+
+  valueOf (): any {
+    if (this.isCompound) {
+      return ASN1._parseCompound(this.bytes, false)
+    }
+
+    switch (this.tag) {
+    case Tag.BOOLEAN:
+      return ASN1.parseBool(this.bytes)
+    case Tag.INTEGER:
+      return ASN1.parseInteger(this.bytes)
+    case Tag.BITSTRING:
+      return ASN1.parseBitString(this.bytes)
+    case Tag.NULL:
+      return ASN1.parseNull(this.bytes)
+    case Tag.OID:
+      const oid = ASN1.parseOID(this.bytes)
+      const name = getOIDName(oid)
+      return name === '' ? oid : name
+    case Tag.UTF8:
+      return ASN1.parseUTF8(this.bytes)
+    case Tag.NUMERICSTRING:
+      return ASN1.parseNumericString(this.bytes)
+    case Tag.PRINTABLESTRING:
+      return ASN1.parsePrintableString(this.bytes)
+    case Tag.T61STRING:
+      return ASN1.parseT61String(this.bytes)
+    case Tag.IA5STRING:
+      return ASN1.parseIA5String(this.bytes)
+    case Tag.GENERALSTRING:
+      return ASN1.parseGeneralString(this.bytes)
+    case Tag.UTCTIME:
+      return ASN1.parseUTCTime(this.bytes)
+    case Tag.GENERALIZEDTIME:
+      return ASN1.parseGeneralizedTime(this.bytes)
+
+    default:
+      return this.bytes
+    }
   }
 
   /**
@@ -507,277 +751,65 @@ export class ASN1 {
    *
    * To capture an ASN.1 value, set an object in the validator's 'capture'
    * parameter to the key to use in the capture map. To capture the full
-   * ASN.1 object, specify 'captureAsn1'. To capture BIT STRING bytes, including
-   * the leading unused bits counter byte, specify 'captureBitStringContents'.
-   * To capture BIT STRING bytes, without the leading unused bits counter byte,
-   * specify 'captureBitStringValue'.
+   * ASN.1 object, specify 'captureASN1'.
    *
    * Objects in the validator may set a field 'optional' to true to indicate
    * that it isn't necessary to pass validation.
    *
-   * @param obj the ASN.1 object to validate.
-   * @param v the ASN.1 structure validator.
+   * @param tpl the ASN.1 structure Template.
    * @param capture an optional map to capture values in.
-   * @param errors an optional array for storing validation errors.
    *
-   * @return true on success, false on failure.
+   * @return null on success, Error on failure.
    */
-  static validate (obj: any, v: any, capture: any, errors?: any[]): boolean {
-    let rval = false
-
-    // ensure tag class and type are the same if specified
-    if ((obj.class === v.class || typeof(v.class) === 'undefined') &&
-      (obj.tag === v.tag || typeof(v.tag) === 'undefined')) {
-      // ensure constructed flag is the same if specified
-      if (obj.constructed === v.constructed ||
-        typeof(v.constructed) === 'undefined') {
-        rval = true
-
-        // handle sub values
-        if (v.value && Array.isArray(v.value)) {
-          let j = 0
-          for (let i = 0; rval && i < v.value.length; ++i) {
-            rval = v.value[i].optional || false
-            if (obj.value[j]) {
-              rval = ASN1.validate(obj.value[j], v.value[i], capture, errors)
-              if (rval) {
-                ++j
-              } else if (v.value[i].optional) {
-                rval = true
-              }
-            }
-            if (!rval && errors) {
-              errors.push(
-                '[' + v.name + '] ' +
-                'Tag class "' + v.class + '", type "' +
-                v.tag + '" expected value length "' +
-                v.value.length + '", got "' + obj.value.length + '"')
-            }
-          }
-        }
-
-        if (rval && capture) {
-          if (v.capture) {
-            capture[v.capture] = obj.value
-          }
-          if (v.captureAsn1) {
-            capture[v.captureAsn1] = obj
-          }
-          if (v.captureBitStringContents && obj.bitStringContents != null) {
-            capture[v.captureBitStringContents] = obj.bitStringContents
-          }
-          if(v.captureBitStringValue && obj.bitStringContents != null) {
-            if (obj.bitStringContents.length < 2) {
-              capture[v.captureBitStringValue] = ''
-            } else {
-              // FIXME: support unused bits with data shifting
-              let unused = obj.bitStringContents.charCodeAt(0)
-              if (unused !== 0) {
-                throw new Error('captureBitStringValue only supported for zero unused bits')
-              }
-              capture[v.captureBitStringValue] = obj.bitStringContents.slice(1)
-            }
-          }
-        }
-      } else if (errors) {
-        errors.push(
-          '[' + v.name + '] ' +
-          'Expected constructed "' + v.constructed + '", got "' +
-          obj.constructed + '"')
-      }
-    } else if (errors) {
-      if(obj.class !== v.class) {
-        errors.push(
-          '[' + v.name + '] ' +
-          'Expected tag class "' + v.class + '", got "' +
-          obj.class + '"')
-      }
-      if (obj.tag !== v.tag) {
-        errors.push(
-          '[' + v.name + '] ' +
-          'Expected type "' + v.tag + '", got "' + obj.tag + '"')
-      }
+  validate (tpl: Template, capture: Captures = {}): Error | null {
+    if (this.class !== tpl.class) {
+      return new Error(`ASN.1 object validate ${tpl.name}: error class`)
     }
-    return rval
-  }
-
-  /**
-   * Creates a new asn1 object.
-   *
-   * @param tagClass the tag class for the object.
-   * @param type the data type (tag number) for the object.
-   * @param constructed true if the asn1 object is in constructed form.
-   * @param value the value for the object, if it is not constructed.
-   * @param [options] the options to use:
-   *          [bitStringContents] the plain BIT STRING content including padding
-   *            byte.
-   *
-   * @return the asn1 object.
-   */
-  class: Class
-  tag: Tag
-  value: Buffer | ASN1[]
-  isCompound: boolean
-  constructor (tagClass: Class, type: Tag, value: Buffer | ASN1[]) {
-    // remove undefined values
-    if (Array.isArray(value)) {
-      value = value.filter((val) => val != null)
+    if (this.tag !== tpl.tag) {
+      return new Error(`ASN.1 object validate ${tpl.name}: error tag`)
     }
 
-    this.class = tagClass
-    this.tag = type
-    this.isCompound = Array.isArray(value)
-    this.value = value
-  }
+    if (tpl.capture != null) {
+      capture[tpl.capture] = this
+    }
 
-  equals (obj: ASN1): boolean {
-    if (!(obj instanceof ASN1)) {
-      return false
-    }
-    if (this.class !== obj.class || this.tag !== obj.tag || this.isCompound !== obj.isCompound) {
-      return false
-    }
-    if (typeof this.value !== typeof obj.value) {
-      return false
-    }
-    if (this.value instanceof Buffer) {
-      return this.value.equals(obj.value as Buffer)
-    } else {
-      const values = this.value as ASN1[]
-      for (let i = 0; i< values.length; i++) {
-        if (!values[i].equals(obj.value[i] as ASN1)) {
-          return false
+    if (Array.isArray(tpl.value)) {
+      const values = this.mustCompound()
+      for (let i = 0; i < tpl.value.length; i++) {
+        const ret = values[i].validate(tpl.value[i], capture)
+        if (ret != null && tpl.value[i].optional !== true) {
+          return ret
         }
       }
     }
-    return true
-  }
 
-  byteLen (): number {
-    let valueLen = 0
-    if (this.isCompound) {
-      const values = this.value as ASN1[]
-      for (const val of values) {
-        valueLen += val.byteLen()
-      }
-    } else {
-      valueLen += this.value.length
-    }
-    if (valueLen <= 127) {
-      return 1 + 1 + valueLen
-    }
-    return valueLen
-  }
-
-  // Converts the given asn1 object to a buffer of bytes in DER format.
-  toDER (): Buffer {
-    // build the first byte
-    let b1 = this.class | this.tag
-    // for storing the ASN.1 value
-    let valueBuf = this.value as Buffer
-
-    if (this.isCompound) {
-      b1 |= 0x20
-      // add all of the child DER bytes together
-      const values = this.value as ASN1[]
-      valueBuf = Buffer.concat(values.map((val) => val.toDER()))
-    }
-
-    let valueByteLen = 0 // use "short form" encoding
-    if (valueBuf.length > 127) {
-      // use "long form" encoding
-      if (valueBuf.length <= 0xff) {
-        valueByteLen += 1
-      } else if (valueBuf.length <= 0xff) {
-        valueByteLen += 1
-      } else if (valueBuf.length <= 0xffff) {
-        valueByteLen += 2
-      } else if (valueBuf.length <= 0xffffff) {
-        valueByteLen += 3
-      } else if (valueBuf.length <= 0xffffffff) {
-        valueByteLen += 4
-      } else if (valueBuf.length <= 0xffffffffff) {
-        valueByteLen += 5
-      } else if (valueBuf.length <= 0xffffffffffff) {
-        valueByteLen += 6
-      } else {
-        throw new Error('invalid value length')
-      }
-    }
-
-    const buf = Buffer.allocUnsafe(2 + valueByteLen + valueBuf.length)
-    buf.writeInt8(b1, 0)
-    if (valueByteLen === 1) {
-      buf.writeUInt8(valueBuf.length, 1)
-      valueBuf.copy(buf, 2)
-    } else {
-      buf.writeUInt8(valueByteLen, 1)
-      buf.writeUIntBE(valueBuf.length, 2, valueByteLen)
-      valueBuf.copy(buf, 2 + valueByteLen)
-    }
-
-    return buf
-  }
-
-  valueOf (): any {
-    if (this.isCompound) {
-      return (this.value as ASN1[]).map((val) => val.toJSON())
-    }
-
-    const value = this.value as Buffer
-    switch (this.tag) {
-    case Tag.BOOLEAN:
-      return ASN1.parseBool(value)
-    case Tag.INTEGER:
-      return ASN1.parseInteger(value)
-    case Tag.NULL:
-      return ASN1.parseNull(value)
-    case Tag.OID:
-      const oid = ASN1.parseOID(value)
-      const name = getOID(oid)
-      return name === '' ? oid : name
-    case Tag.UTF8:
-      return ASN1.parseUTF8(value)
-    case Tag.NUMERICSTRING:
-      return ASN1.parseNumericString(value)
-    case Tag.PRINTABLESTRING:
-      return ASN1.parsePrintableString(value)
-    case Tag.T61STRING:
-      return ASN1.parseT61String(value)
-    case Tag.IA5STRING:
-      return ASN1.parseIA5String(value)
-    case Tag.GENERALSTRING:
-      return ASN1.parseGeneralString(value)
-    case Tag.UTCTIME:
-      return ASN1.parseUTCTime(value)
-    case Tag.GENERALIZEDTIME:
-      return ASN1.parseGeneralizedTime(value)
-
-    default:
-      return value.toString('hex')
-    }
+    return null
   }
 
   toString (): string {
     return JSON.stringify(this.toJSON())
   }
 
-  [inspect.custom] (_depth: any, _options: any): string {
-    return `<${this.constructor.name} ${this.toString()}>`
-  }
-
   toJSON () {
+    let value = this.value
+    if (Array.isArray(value)) {
+      value = value.map((val) => val.toJSON())
+    }
     return {
       class: Class[this.class],
       tag: Tag[this.tag],
-      value: this.valueOf(),
+      value,
     }
+  }
+
+  [inspect.custom] (_depth: any, _options: any): string {
+    return `<${this.constructor.name} ${this.toString()}>`
   }
 }
 
 // Gets the length of a BER-encoded ASN.1 value.
-function _getValueLength (bufv: BufferVisitor): number {
-  bufv.assertWalk(1, 'Too few bytes to read ASN.1 value length.')
+function getValueLength (bufv: BufferVisitor): number {
+  bufv.mustWalk(1, 'Too few bytes to read ASN.1 value length.')
   const byte = bufv.buf[bufv.start]
 
   // see if the length is "short form" or "long form" (bit 8 set)
@@ -786,67 +818,47 @@ function _getValueLength (bufv: BufferVisitor): number {
     return byte
   }
 
-  let byteLen = byte & 0x7f
-  bufv.assertWalk(byteLen, 'Too few bytes to read ASN.1 value length.')
+  const byteLen = byte & 0x7f
+  bufv.mustWalk(byteLen, 'Too few bytes to read ASN.1 value length.')
   return bufv.buf.readUIntBE(bufv.start, byteLen)
 }
 
-// Internal function to parse an asn1 object from a byte buffer in DER format.
-function fromDER (bufv: BufferVisitor, depth: number, options: any): ASN1 {
-  bufv.assertWalk(1, 'Too few bytes to read ASN.1 tag.')
-
-  const b1 = bufv.buf[bufv.start]
-  const tagClass = b1 & 0xc0
-  const type = b1 & 0x1f
-
-  // value storage
-  let value = null
-  let valueLen = _getValueLength(bufv)
-  bufv.assertRemaining(valueLen)
-
-  // constructed flag is bit 6 (32 = 0x20) of the first byte
-  const isCompound = ((b1 & 0x20) === 0x20)
-  if (isCompound) {
-    // parse child asn1 objects from the value
-    value = []
-    if (valueLen == 0) {
-      if (options.strict) {
-        throw new Error('Non-constructed ASN.1 object of indefinite length.')
-      }
-      // asn1 object of indefinite length, read until end tag
-      for (;;) {
-        bufv.assertRemaining(2)
-        if (bufv.buf[bufv.start] === 0 && bufv.buf[bufv.start + 1] === 0) {
-          break
-        }
-        value.push(fromDER(bufv, depth + 1, options))
-      }
-    } else {
-      let readByteLen = 0
-      while (readByteLen < valueLen) {
-        const start = bufv.end
-        value.push(fromDER(bufv, depth + 1, options))
-        readByteLen += bufv.end - start
-      }
-    }
-
+// Gets the length of a BER-encoded ASN.1 value length's bytes
+function getValueLengthByte (valueLen: number): number {
+  if (valueLen <= 127) {
+    return 0
+  } else if (valueLen <= 0xff) {
+    return 1
+  } else if (valueLen <= 0xffff) {
+    return 2
+  } else if (valueLen <= 0xffffff) {
+    return 3
+  } else if (valueLen <= 0xffffffff) {
+    return 4
+  } else if (valueLen <= 0xffffffffff) {
+    return 5
+  } else if (valueLen <= 0xffffffffffff) {
+    return 6
   } else {
-    // asn1 not constructed or isCompound, get raw value
-    if (valueLen === 0) {
-      if (options.strict) {
-        throw new Error('Non-constructed ASN.1 object of indefinite length.')
-      }
-    }
-
-    bufv.assertWalk(valueLen)
-    value = bufv.buf.slice(bufv.start, bufv.end)
+    throw new Error('invalid value length')
   }
-
-  // create and return asn1 object
-  return new ASN1(tagClass, type, value)
 }
 
-const NumericReg = /^[0-9 ]+$/
-function isNumeric (b: number): boolean {
-	return 48 <= b && b <= 57 || b == 32 // '0' to '9', and ' '
+function isNumericString (str: string): boolean {
+  for (const s of str) {
+    const n = s.charCodeAt(0)
+    if (n !== 32 && (n < 48 || n > 57)) { // '0' to '9', and ' '
+      return false
+    }
+  }
+  return true
+}
+
+function isIA5String (str: string): boolean {
+  for (const s of str) {
+    if (s.charCodeAt(0) >= 0x80) {
+      return false
+    }
+  }
+  return true
 }
