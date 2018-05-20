@@ -1,7 +1,9 @@
 'use strict'
-// **Github:** https://github.com/fidm/x509js
+// **Github:** https://github.com/fidm/x509
 //
 // **License:** MIT
+
+import { isIP } from 'net'
 
 export class Visitor {
   start: number
@@ -54,6 +56,87 @@ export class BufferVisitor extends Visitor {
     this.mustHas(steps, message)
     this.walk(steps)
   }
+}
+
+export function bytesFromIP (ip: string): Buffer | null {
+  switch (isIP(ip)) {
+  case 4:
+    return Buffer.from(ip.split('.').map((val) => parseInt(val, 10)))
+  case 6:
+    const vals = ip.split(':')
+    const buf = Buffer.alloc(16)
+    let offset = 0
+    if (vals[vals.length - 1] === '') {
+      vals[vals.length - 1] = '0'
+    }
+    for (let i = 0; i < vals.length; i++) {
+      if (vals[i] === '') {
+        if (i + 1 < vals.length && vals[i + 1] !== '') {
+          // reset offset for non-zero values
+          offset = 16 - (vals.length - i - 1) * 2
+        }
+        // skip zero bytes
+        continue
+      }
+      buf.write(vals[i], offset, 2, 'hex')
+      offset += 2
+    }
+    return buf
+  default:
+   return null
+  }
+}
+
+// Converts 4-bytes into an IPv4 string representation or 16-bytes into
+// an IPv6 string representation. The bytes must be in network order.
+export function bytesToIP (bytes: Buffer): string {
+  return bytes.length === 4 ? bytesToIPv4(bytes) : bytesToIPv6(bytes)
+}
+
+// Converts 4-bytes into an IPv4 string representation. The bytes must be in network order.
+export function bytesToIPv4 (bytes: Buffer): string {
+  if (bytes.length !== 4) {
+    return ''
+  }
+  const ip = [bytes[0], bytes[1], bytes[2], bytes[3]]
+  return ip.join('.')
+}
+
+// Converts 16-bytes into an IPv16 string representation. The bytes must be in network order.
+export function bytesToIPv6 (bytes: Buffer): string {
+  if (bytes.length !== 16) {
+    return ''
+  }
+  const ip = []
+  let zeroAt = -1
+  let zeroLen = 0
+  let maxAt = -1
+  let maxLen = 0
+
+  for (let i = 0; i < bytes.length; i += 2) {
+    const hex = (bytes[i] + bytes[i + 1])
+    if (hex === 0) {
+      zeroLen++
+      if (zeroAt === -1) {
+        zeroAt = ip.length
+      }
+      if (zeroLen > maxLen) {
+        maxLen = zeroLen
+        maxAt = zeroAt
+      }
+    } else {
+      zeroAt = -1
+      zeroLen = 0
+    }
+    ip.push(hex.toString(16))
+  }
+
+  if (maxLen > 0) {
+    const rest = ip.slice(maxAt + maxLen)
+    ip.length = maxAt
+    ip.push('', ...rest)
+  }
+  return ip.join(':')
 }
 
 const oids: { [index: string]: string } = Object.create(null)

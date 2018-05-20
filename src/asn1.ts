@@ -1,5 +1,5 @@
 'use strict'
-// **Github:** https://github.com/fidm/x509js
+// **Github:** https://github.com/fidm/x509
 //
 // **License:** MIT
 
@@ -7,12 +7,12 @@ import { inspect } from 'util'
 import { BufferVisitor, getOID, getOIDName } from './common'
 
 export interface Template {
-  name?: string
+  name: string
   class: Class
   tag: Tag
   optional?: boolean
   capture?: string
-  value?: Template[]
+  value?: Template | Template[]
 }
 
 export interface Captures {
@@ -172,9 +172,36 @@ export class ASN1 {
     // some INTEGER will be 16 bytes, 32 bytes or others.
     // CertificateSerialNumber ::= INTEGER (>= 16 bytes)
     if (buf.length > 6) {
-      return '0x' + buf.toString('hex')
+      return buf.toString('hex')
     }
     return buf.readIntBE(0, buf.length)
+  }
+
+  static parseIntegerNum (buf: Buffer): number {
+    const value = ASN1.parseInteger(buf)
+    if (typeof value !== 'number') {
+      throw new Error('ASN1 syntax error: invalid Integer number')
+    }
+    return value as number
+  }
+
+  static parseIntegerStr (buf: Buffer): string {
+    const value = ASN1.parseInteger(buf)
+    if (typeof value === 'number') {
+      return '0x' + value.toString(16)
+    }
+    return value as string
+  }
+
+  static BitString (bs: BitString | Buffer): ASN1 {
+    if (bs instanceof Buffer) {
+      bs = new BitString(bs, bs.length)
+    }
+    const paddingBits = bs.buf.length * 8 - bs.bitLen
+    const buf = Buffer.alloc(bs.buf.length + 1)
+    buf.writeInt8(paddingBits, 0)
+    bs.buf.copy(buf, 1)
+    return new ASN1(Class.UNIVERSAL, Tag.BITSTRING, buf)
   }
 
   // Tag.BITSTRING
@@ -225,31 +252,17 @@ export class ASN1 {
     bytes.push(40 * parseInt(values[0], 10) + parseInt(values[1], 10))
     // other bytes are each value in base 128 with 8th bit set except for
     // the last byte for each value
-    let last
-    let valueBytes
-    let value
-    let b
+    const valueBytes = []
     for (let i = 2; i < values.length; ++i) {
-      // produce value bytes in reverse because we don't know how many
-      // bytes it will take to store the value
-      last = true
-      valueBytes = []
-      value = parseInt(values[i], 10)
-      do {
-        b = value & 0x7F
+      let value = parseInt(values[i], 10)
+      valueBytes.length = 0
+      valueBytes.push(value & 0x7f)
+      while (value > 0x7f) {
         value = value >>> 7
-        // if value is not last, then turn on 8th bit
-        if (!last) {
-          b |= 0x80
-        }
-        valueBytes.push(b)
-        last = false
-      } while (value > 0)
-
-      // add value bytes in reverse (needs to be in big endian)
-      for (let n = valueBytes.length - 1; n >= 0; --n) {
-        bytes.push(valueBytes[n])
+        valueBytes.unshift((value & 0x7f) | 0x80) // add value bytes in reverse for big endian
       }
+
+      bytes.push(...valueBytes)
     }
 
     const asn1 = new ASN1(Class.UNIVERSAL, Tag.OID, Buffer.from(bytes))
@@ -259,22 +272,19 @@ export class ASN1 {
 
   static parseOID (buf: Buffer): string {
     // first byte is 40 * value1 + value2
-    let b = buf[0]
-    let oid = Math.floor(b / 40) + '.' + (b % 40)
+    let oid = Math.floor(buf[0] / 40) + '.' + (buf[0] % 40)
 
     // other bytes are each value in base 128 with 8th bit set except for
     // the last byte for each value
-    let value = 0
+    let high = 0
     for (let i = 1; i < buf.length; i++) {
-      b = buf[i]
-      value = value << 7
       // not the last byte for the value
-      if ((b & 0x80) === 0x80) {
-        value += b & 0x7F
+      if (buf[i] >= 0x80) {
+        high += buf[i] & 0x7F
+        high = high << 7
       } else {
-        // last byte
-        oid += '.' + (value + b)
-        value = 0
+        oid += '.' + (high + buf[i])
+        high = 0
       }
     }
 
@@ -592,7 +602,18 @@ export class ASN1 {
   }
 
   static Seq (objs: ASN1[]): ASN1 {
-    const asn1 = new ASN1(Class.UNIVERSAL, Tag.SEQUENCE, Buffer.concat(objs.map((obj) => obj.toDER())))
+    const asn1 = new ASN1(Class.UNIVERSAL, Tag.SEQUENCE,
+      Buffer.concat(objs.map((obj) => obj.toDER())))
+    asn1._value = objs
+    return asn1
+  }
+
+  static Spec (tag: Tag, objs: ASN1 | ASN1[], isCompound: boolean = true): ASN1 {
+    const bytes = Array.isArray(objs) ? Buffer.concat(objs.map((obj) => obj.toDER())) : objs.toDER()
+    if (Array.isArray(objs)) {
+      isCompound = true
+    }
+    const asn1 = new ASN1(Class.CONTEXT_SPECIFIC, tag, bytes, isCompound)
     asn1._value = objs
     return asn1
   }
@@ -649,7 +670,8 @@ export class ASN1 {
     this.class = tagClass
     this.tag = tag
     this.bytes = data
-    this.isCompound = isCompound || tag === Tag.SEQUENCE || tag === Tag.SET // SEQUENCE, SET, NONE, others...
+    // CONTEXT_SPECIFIC, SEQUENCE, SET, others...
+    this.isCompound = isCompound || tag === Tag.SEQUENCE || tag === Tag.SET
     this._value = undefined
   }
 
@@ -662,7 +684,9 @@ export class ASN1 {
 
   mustCompound (msg: string = 'asn1 object value is not compound'): ASN1[] {
     if (!this.isCompound || !Array.isArray(this.value)) {
-      throw new Error(msg)
+      const err = new Error(msg) as any
+      err.data = this.toJSON()
+      throw err
     }
     return this.value as ASN1[]
   }
@@ -706,6 +730,10 @@ export class ASN1 {
   valueOf (): any {
     if (this.isCompound) {
       return ASN1._parseCompound(this.bytes, false)
+    }
+
+    if (this.class !== Class.UNIVERSAL) {
+      return this.bytes
     }
 
     switch (this.tag) {
@@ -761,26 +789,35 @@ export class ASN1 {
    *
    * @return null on success, Error on failure.
    */
-  validate (tpl: Template, capture: Captures = {}): Error | null {
+  validate (tpl: Template, captures: Captures = {}): Error | null {
     if (this.class !== tpl.class) {
-      return new Error(`ASN.1 object validate ${tpl.name}: error class`)
+      return new Error(`ASN.1 object validate failure for ${tpl.name} : error class ${Class[this.class]}`)
     }
     if (this.tag !== tpl.tag) {
-      return new Error(`ASN.1 object validate ${tpl.name}: error tag`)
+      return new Error(`ASN.1 object validate failure for ${tpl.name}: error tag ${Tag[this.tag]}`)
     }
 
     if (tpl.capture != null) {
-      capture[tpl.capture] = this
+      captures[tpl.capture] = this
     }
 
     if (Array.isArray(tpl.value)) {
-      const values = this.mustCompound()
-      for (let i = 0; i < tpl.value.length; i++) {
-        const ret = values[i].validate(tpl.value[i], capture)
-        if (ret != null && tpl.value[i].optional !== true) {
-          return ret
+      const values = this.mustCompound(`${tpl.name} need compound ASN1 value`)
+      for (let i = 0, j = 0; i < tpl.value.length; i++) {
+        if (values[j] != null) {
+          const err = values[j].validate(tpl.value[i], captures)
+          if (err == null) {
+            j++
+          } else if (tpl.value[i].optional !== true) {
+            return err
+          }
+        } else if (tpl.value[i].optional !== true) {
+          return new Error(`ASN.1 object validate failure for ${tpl.value[i].name}: not exists`)
         }
       }
+    } else if (tpl.value != null) {
+      const buf = this.tag === Tag.BITSTRING ? this.bytes.slice(1) : this.bytes
+      return ASN1.fromDER(buf).validate(tpl.value, captures)
     }
 
     return null

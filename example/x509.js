@@ -1,13 +1,10 @@
-# x509
-X509 certificate tools for Node.js, includes PEM, ASN1 with DER.
+'use strict'
+// **Github:** https://github.com/fidm/x509
+//
+// **License:** MIT
 
-Inspired by https://github.com/digitalbazaar/forge
-
-## example
-
-```js
 const fs = require('fs')
-const { Certificate } = require('@fidm/x509')
+const { Certificate } = require('../')
 
 const crtData = fs.readFileSync('./test/cert/github.crt')
 const cert = Certificate.fromPEM(crtData)
@@ -94,4 +91,3 @@ console.log(cert.toJSON())
 //    { n: '00c63caaf23c970c3ac14f28ad72707dd3ceb9b56073a4749b8a7746fd7a98424cc53019579aa9330be15d4d1058ca7799c393f3f97590bcbfbbe095ba2ec58d736105d31084a8b389b82f738cf02a6ebeeeae834b8211b161fd7761da9b1b9a23ff8c7ea20106ddd17f539608c15afae7c0cac8448c57a7a8615f660d57d3b896acb64a9cc1eae8fb964029f61530b504b0cc05b684c32459957fa26590e5b0b31a7559c43f31140ad5ccaa3a8505520632960761df27820cf785db6031f00950c5b71a23e1b07d02f5141ec9cbe87e2a3304f6513f529815e90b76475c4d4a6bc50815aef8d157e9ea7014ffc945b90c7cbcf46de60552f98c80bb7056910f4b',
 //      e: '010001' },
 //   signatureParameters: {} }
-```

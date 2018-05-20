@@ -1,5 +1,5 @@
 'use strict'
-// **Github:** https://github.com/fidm/x509js
+// **Github:** https://github.com/fidm/x509
 //
 // **License:** MIT
 
@@ -13,9 +13,7 @@ const crtData = fs.readFileSync('./test/cert/github.crt')
 suite('PEM', function () {
   it('should work', function () {
     const pems = PEM.parse(crtData)
-    strictEqual(pems.length, 2)
+    strictEqual(pems.length, 1)
     strictEqual(pems[0].type, 'CERTIFICATE')
-    strictEqual(pems[1].type, 'CERTIFICATE')
-    strictEqual(pems[0].toString() + pems[1].toString(), crtData.toString('utf8'))
   })
 })

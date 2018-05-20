@@ -1,5 +1,5 @@
 'use strict'
-// **Github:** https://github.com/fidm/x509js
+// **Github:** https://github.com/fidm/x509
 //
 // **License:** MIT
 
@@ -49,7 +49,7 @@ export class PEM {
     this.headers = Object.create(null)
   }
 
-  procType (): string {
+  get procType (): string {
     return this.getHeader(procType)
   }
 
@@ -74,7 +74,7 @@ export class PEM {
     const headers = Object.keys(this.headers)
     if (headers.length > 0) {
       // The Proc-Type header must be written first. See RFC 1421, section 4.6.1.1
-      const type = this.procType()
+      const type = this.procType
       if (type !== '') {
         rVal += `${procType}: ${type}\n`
       }

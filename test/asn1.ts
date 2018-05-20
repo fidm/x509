@@ -1,5 +1,5 @@
 'use strict'
-// **Github:** https://github.com/fidm/x509js
+// **Github:** https://github.com/fidm/x509
 //
 // **License:** MIT
 
