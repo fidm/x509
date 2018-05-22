@@ -19,6 +19,6 @@ suite('ASN1', function () {
     strictEqual(asn1.class, Class.UNIVERSAL)
     strictEqual(asn1.tag, Tag.SEQUENCE)
     ok(Array.isArray(asn1.value))
-    ok(asn1.toString().includes('github.com'))
+    ok(JSON.stringify(asn1.toJSON()).includes('github.com'))
   })
 })

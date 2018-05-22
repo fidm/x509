@@ -5,4 +5,5 @@
 
 export { PEM } from './pem'
 export { ASN1, Template, Captures, Class, Tag, BitString } from './asn1'
-export { Certificate, publicKeyFromPem, publicKeyToPem, publicKeyToRSAPublicKeyPem } from './x509'
+export { RSAPublicKey } from './rsa'
+export { Certificate } from './x509'

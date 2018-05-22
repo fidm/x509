@@ -35,7 +35,7 @@ export class PEM {
       res.push(parse(lines))
     }
     if (res.length === 0) {
-      throw new Error('pem: no block')
+      throw new Error('PEM: no block')
     }
     return res
   }
@@ -99,8 +99,8 @@ export class PEM {
     return rVal
   }
 
-  [inspect.custom] (_depth: any, _options: any): string {
-    return `<${this.constructor.name} ${JSON.stringify(this.toJSON())}>`
+  [inspect.custom] (_depth: any, options: any): string {
+    return `<${this.constructor.name} ${inspect(this.toJSON(), options)}>`
   }
 
   valueOf () {
