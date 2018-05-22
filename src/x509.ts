@@ -3,10 +3,12 @@
 //
 // **License:** MIT
 
+import { inspect } from 'util'
 import { createHash, Hash } from 'crypto'
-import { bytesToIP, bytesFromIP, getOID, getOIDName } from './common'
+import { bytesToIP, getOID, getOIDName } from './common'
 import { ASN1, Class, Tag, Template, Captures, BitString } from './asn1'
 import { PEM } from './pem'
+import { publicKeyValidator, RSAPublicKey } from './rsa'
 
 // short name OID mappings
 const shortNames = Object.create(null)
@@ -27,68 +29,6 @@ shortNames.emailAddress = 'E'
 
 function getShortName (name: string): string {
   return shortNames[name] == null ? '' : shortNames[name]
-}
-
-export interface Hasher {
-  update (data: Buffer | string, inputEncoding?: string): any
-  digest (encoding?: string): string | Buffer
-}
-
-export interface RSAPublicKey {
-  n: string // modulus, hex string
-  e: string // public exponent, hex string
-}
-
-// validator for an SubjectPublicKeyInfo structure
-// Note: Currently only works with an RSA public key
-const publicKeyValidator: Template = {
-  name: 'SubjectPublicKeyInfo',
-  class: Class.UNIVERSAL,
-  tag: Tag.SEQUENCE,
-  capture: 'subjectPublicKeyInfo',
-  value: [{
-    name: 'SubjectPublicKeyInfo.AlgorithmIdentifier',
-    class: Class.UNIVERSAL,
-    tag: Tag.SEQUENCE,
-    value: [{
-      name: 'AlgorithmIdentifier.algorithm',
-      class: Class.UNIVERSAL,
-      tag: Tag.OID,
-      capture: 'publicKeyOID',
-    }],
-  }, {
-    name: 'SubjectPublicKeyInfo.subjectPublicKey',
-    class: Class.UNIVERSAL,
-    tag: Tag.BITSTRING,
-    value: {
-      name: 'SubjectPublicKeyInfo.subjectPublicKey.RSAPublicKey',
-      class: Class.UNIVERSAL,
-      tag: Tag.SEQUENCE,
-      optional: true,
-      capture: 'rsaPublicKey',
-    },
-  }],
-}
-
-// validator for an RSA public key
-const rsaPublicKeyValidator: Template = {
-  // RSAPublicKey
-  name: 'RSAPublicKey',
-  class: Class.UNIVERSAL,
-  tag: Tag.SEQUENCE,
-  value: [{
-    // modulus (n)
-    name: 'RSAPublicKey.modulus',
-    class: Class.UNIVERSAL,
-    tag: Tag.INTEGER,
-    capture: 'publicKeyModulus',
-  }, {
-    // publicExponent (e)
-    name: 'RSAPublicKey.exponent',
-    class: Class.UNIVERSAL,
-    tag: Tag.INTEGER,
-    capture: 'publicKeyExponent',
-  }],
 }
 
 // validator for an X.509v3 certificate
@@ -129,7 +69,7 @@ const x509CertificateValidator: Template = {
       }, {
         name: 'Certificate.TBSCertificate.signature.parameters',
         class: Class.UNIVERSAL,
-        tag: Tag.OCTETSTRING, // ?
+        tag: Tag.OCTETSTRING,
         optional: true,
         capture: 'certinfoSignatureParams',
       }],
@@ -325,36 +265,36 @@ export interface Attribute {
   extensions?: Extension[]
 }
 
-// Converts an RSA public key from PEM format.
-export function publicKeyFromPem (pem: Buffer): RSAPublicKey {
-  const msg = PEM.parse(pem)[0]
-
-  if (msg.type !== 'PUBLIC KEY' && msg.type !== 'RSA PUBLIC KEY') {
-    throw new Error('Could not convert public key from PEM')
-  }
-  if (msg.procType.includes('ENCRYPTED')) {
-    throw new Error('Could not convert public key from PEM; PEM is encrypted.');
-  }
-
-  return publicKeyFromASN1(ASN1.fromDER(msg.body))
-}
-
-// Converts an RSA public key to PEM format (using a SubjectPublicKeyInfo).
-export function publicKeyToPem (key: RSAPublicKey): PEM {
-  return new PEM('PUBLIC KEY', publicKeyToASN1(key).toDER())
-}
-
-// Converts an RSA public key to PEM format (using an RSAPublicKey).
-export function publicKeyToRSAPublicKeyPem (key: RSAPublicKey): PEM {
-  return new PEM('RSA PUBLIC KEY', publicKeyToRSAPublicKey(key).toDER())
-}
-
-export class TargetInfo {
-  attributes: Attribute[]
+export class DistinguishedName {
   uniqueId: BitString | null
+  attributes: Attribute[]
   constructor () {
     this.attributes = []
     this.uniqueId = null
+  }
+
+  get commonName (): string {
+    return this.getFieldValue('commonName')
+  }
+
+  get organizationName (): string {
+    return this.getFieldValue('organizationName')
+  }
+
+  get organizationalUnitName (): string {
+    return this.getFieldValue('organizationalUnitName')
+  }
+
+  get countryName (): string {
+    return this.getFieldValue('countryName')
+  }
+
+  get localityName (): string {
+    return this.getFieldValue('localityName')
+  }
+
+  get serialName (): string {
+    return this.getFieldValue('serialName')
   }
 
   getHash (): Buffer {
@@ -366,8 +306,13 @@ export class TargetInfo {
     return hasher.digest()
   }
 
-  getField (sn: string): Attribute | null {
-    return getAttribute(this, sn)
+  getField (key: string): Attribute | null {
+    for (const attr of this.attributes) {
+      if (key === attr.oid || key === attr.name || key === attr.shortName) {
+        return attr
+      }
+    }
+    return null
   }
 
   addField (attr: any) {
@@ -384,16 +329,22 @@ export class TargetInfo {
   toJSON () {
     const obj = {} as any
     for (const attr of this.attributes) {
-      let key = attr.shortName
-      if (key == null || key === '') {
-        key = attr.name
+      const key = attr.shortName
+      if (typeof key === 'string' && key !== '') {
+        obj[key] = attr.value
       }
-      if (key == null || key === '') {
-        key = attr.oid
-      }
-      obj[key] = attr.value
     }
+    obj.uniqueId = this.uniqueId
+    obj.attributes = this.attributes
     return obj
+  }
+
+  private getFieldValue (key: string): string {
+    const val = this.getField(key)
+    if (val != null) {
+      return val.value
+    }
+    return ''
   }
 }
 
@@ -413,11 +364,36 @@ export class Certificate {
     }
 
     const obj = ASN1.fromDER(msg.body)
-    return Certificate.fromASN1(obj)
+    return new Certificate(obj)
   }
 
-  // Converts an X.509v3 RSA certificate from an ASN.1 object.
-  static fromASN1 (obj: ASN1): Certificate {
+  readonly version: number
+  readonly serialNumber: string
+  readonly signatureOID: string
+  readonly signatureAlgorithm: string
+  readonly signatureParameters: any
+  readonly siginfo: any
+  readonly signature: Buffer
+  readonly subjectKeyIdentifier: string
+  readonly authorityKeyIdentifier: string
+  readonly ocspServer: string
+  readonly issuingCertificateURL: string
+  readonly isCA: boolean
+  readonly maxPathLen: number
+  readonly basicConstraintsValid: boolean
+  readonly dnsNames: string[]
+  readonly emailAddresses: string[]
+  readonly ipAddresses: string[]
+  readonly uris: string[]
+  readonly validFrom: Date
+  readonly validTo: Date
+  readonly issuer: DistinguishedName
+  readonly subject: DistinguishedName
+  readonly extensions: Extension[]
+  readonly publicKey: RSAPublicKey
+  readonly publicKeyRaw: Buffer
+  readonly tbsCertificate: ASN1
+  constructor (obj: ASN1) {
     // validate certificate and capture data
     const captures: Captures = Object.create(null)
     const err = obj.validate(x509CertificateValidator, captures)
@@ -432,112 +408,116 @@ export class Certificate {
     }
 
     // create certificate
-    const cert = new Certificate()
-    cert.version = captures.certVersion == null ? 0 : ASN1.parseIntegerNum(captures.certVersion.bytes)
-    cert.serialNumber = ASN1.parseIntegerStr(captures.certSerialNumber.bytes)
-    cert.signatureOID = ASN1.parseOID(captures.certSignatureOID.bytes)
+    this.version = captures.certVersion == null ? 0 : ASN1.parseIntegerNum(captures.certVersion.bytes)
+    this.serialNumber = ASN1.parseIntegerStr(captures.certSerialNumber.bytes)
+    this.signatureOID = ASN1.parseOID(captures.certSignatureOID.bytes)
+    this.signatureAlgorithm = getOIDName(this.signatureOID)
+    this.signatureParameters = null
     if (captures.certSignatureParams != null) {
-      cert.signatureParameters = readSignatureParameters(cert.signatureOID, captures.certSignatureParams, true)
+      this.signatureParameters = readSignatureParameters(this.signatureOID, captures.certSignatureParams, true)
     }
-    cert.siginfo.algorithmOID = ASN1.parseOID(captures.certinfoSignatureOID.bytes)
+
+    this.siginfo = {}
+    this.siginfo.algorithmOID = ASN1.parseOID(captures.certinfoSignatureOID.bytes)
     if (captures.certinfoSignatureParams != null) {
-      cert.siginfo.parameters =
-        readSignatureParameters(cert.siginfo.algorithmOID, captures.certinfoSignatureParams, false);
+      this.siginfo.parameters =
+        readSignatureParameters(this.siginfo.algorithmOID, captures.certinfoSignatureParams, false)
     }
-    cert.signature = ASN1.parseBitString(captures.certSignature.bytes).buf
+    this.signature = ASN1.parseBitString(captures.certSignature.bytes).buf
 
     if (captures.certValidity1UTCTime != null) {
-      cert.validity.notBefore = ASN1.parseUTCTime(captures.certValidity1UTCTime.bytes)
+      this.validFrom = ASN1.parseUTCTime(captures.certValidity1UTCTime.bytes)
     } else if (captures.certValidity2GeneralizedTime != null) {
-      cert.validity.notBefore = ASN1.parseGeneralizedTime(captures.certValidity2GeneralizedTime.bytes)
+      this.validFrom = ASN1.parseGeneralizedTime(captures.certValidity2GeneralizedTime.bytes)
     } else {
       throw new Error('Cannot read notBefore validity times')
     }
 
     if (captures.certValidity3UTCTime != null) {
-      cert.validity.notAfter = ASN1.parseUTCTime(captures.certValidity3UTCTime.bytes)
+      this.validTo = ASN1.parseUTCTime(captures.certValidity3UTCTime.bytes)
     } else if (captures.certValidity4GeneralizedTime != null) {
-      cert.validity.notAfter = ASN1.parseGeneralizedTime(captures.certValidity4GeneralizedTime.bytes)
+      this.validTo = ASN1.parseGeneralizedTime(captures.certValidity4GeneralizedTime.bytes)
     } else {
       throw new Error('Cannot read notAfter validity times')
     }
-    // keep TBSCertificate to preserve signature when exporting
-    cert.tbsCertificate = captures.tbsCertificate
 
-    // handle issuer, build issuer message digest
-    cert.issuer.setAttrs(RDNAttributesAsArray(captures.certIssuer))
+    this.issuer = new DistinguishedName()
+    this.issuer.setAttrs(RDNAttributesAsArray(captures.certIssuer))
     if (captures.certIssuerUniqueId != null) {
-      cert.issuer.uniqueId = ASN1.parseBitString(captures.certIssuerUniqueId.bytes)
+      this.issuer.uniqueId = ASN1.parseBitString(captures.certIssuerUniqueId.bytes)
     }
 
-    // handle subject, build subject message digest
-    cert.subject.setAttrs(RDNAttributesAsArray(captures.certSubject))
+    this.subject = new DistinguishedName()
+    this.subject.setAttrs(RDNAttributesAsArray(captures.certSubject))
     if (captures.certSubjectUniqueId != null) {
-      cert.subject.uniqueId = ASN1.parseBitString(captures.certSubjectUniqueId.bytes)
+      this.subject.uniqueId = ASN1.parseBitString(captures.certSubjectUniqueId.bytes)
     }
 
-    // handle extensions
+    this.extensions = []
+    this.subjectKeyIdentifier = ''
+    this.authorityKeyIdentifier = ''
+    this.ocspServer = ''
+    this.issuingCertificateURL = ''
+    this.isCA = false
+    this.maxPathLen = -1
+    this.basicConstraintsValid = false
+    this.dnsNames = []
+    this.emailAddresses = []
+    this.ipAddresses = []
+    this.uris = []
     if (captures.certExtensions != null) {
-      cert.extensions = certificateExtensionsFromAsn1(captures.certExtensions)
+      this.extensions = certificateExtensionsFromAsn1(captures.certExtensions)
+      for (const ext of this.extensions) {
+        if (typeof ext.subjectKeyIdentifier === 'string') {
+          this.subjectKeyIdentifier = ext.subjectKeyIdentifier
+        }
+        if (typeof ext.authorityKeyIdentifier === 'string') {
+          this.authorityKeyIdentifier = ext.authorityKeyIdentifier
+        }
+        if (typeof ext.authorityInfoAccessOcsp === 'string') {
+          this.ocspServer = ext.authorityInfoAccessOcsp
+        }
+        if (typeof ext.authorityInfoAccessIssuers === 'string') {
+          this.issuingCertificateURL = ext.authorityInfoAccessIssuers
+        }
+        if (typeof ext.basicConstraintsValid === 'boolean') {
+          this.isCA = ext.isCA
+          this.maxPathLen = ext.maxPathLen
+          this.basicConstraintsValid = ext.basicConstraintsValid
+        }
+
+        if (Array.isArray(ext.altNames)) {
+          for (const item of ext.altNames) {
+            if (item.dnsName != null) {
+              this.dnsNames.push(item.dnsName)
+            }
+            if (item.email != null) {
+              this.emailAddresses.push(item.email)
+            }
+            if (item.ip != null) {
+              this.ipAddresses.push(item.ip)
+            }
+            if (item.uri != null) {
+              this.uris.push(item.uri)
+            }
+          }
+        }
+      }
     }
 
     // convert RSA public key from ASN.1
-    cert.publicKey = publicKeyFromASN1(captures.subjectPublicKeyInfo)
-    return cert
-  }
-
-  version: number
-  serialNumber: string
-  signatureOID: string
-  signature: Buffer | null
-  siginfo: any
-  validity: { notBefore: Date, notAfter: Date }
-  issuer: TargetInfo
-  subject: TargetInfo
-  extensions: Extension[]
-  publicKey: RSAPublicKey | null
-  signatureParameters: any
-  tbsCertificate: ASN1 | null
-  constructor () {
-    this.version = 0x02
-    this.serialNumber = '00'
-    this.signatureOID = ''
-    this.signature = null
-    this.siginfo = {}
-    this.siginfo.algorithmOID = null
-    this.validity = { notBefore: new Date(), notAfter: new Date() }
-
-    this.issuer = new TargetInfo()
-    this.subject = new TargetInfo()
-    this.extensions = []
-    this.publicKey = null
-    this.signatureParameters = {}
-    this.tbsCertificate = null
+    this.publicKey = RSAPublicKey.fromPublicKeyASN1(captures.subjectPublicKeyInfo)
+    this.publicKeyRaw = captures.subjectPublicKeyInfo.toDER()
+    this.tbsCertificate = captures.tbsCertificate
   }
 
   toJSON () {
-    return {
-      version: this.version,
-      serialNumber: this.serialNumber,
-      signatureOID: this.signatureOID,
-      signature: this.signature,
-      siginfo: this.siginfo,
-      validity: this.validity,
-      issuer: this.issuer.toJSON(),
-      subject: this.subject.toJSON(),
-      extensions: this.extensions,
-      publicKey: this.publicKey,
-      signatureParameters: this.signatureParameters,
+    const obj = {} as any
+    for (const key of Object.keys(this)) {
+      obj[key] = toJSONify((this as any)[key])
     }
-  }
-
-  // Sets the extensions of this certificate.
-  setExtensions (exts: any) {
-    for (const ext of exts) {
-      fillMissingExtensionFields(ext, { cert: this })
-    }
-    // set new extensions
-    this.extensions = exts
+    delete obj.tbsCertificate
+    return obj
   }
 
   // Gets an extension by its name or id.
@@ -555,37 +535,19 @@ export class Certificate {
     return null
   }
 
-  getHash (): Buffer {
-    const hasher = getHasher(this.signatureOID)
-    if (hasher != null && this.tbsCertificate != null) {
-      return hasher.update(this.tbsCertificate.bytes).digest()
+  // Attempts verify the signature on the passed certificate using this certificate's public key.
+  verify (child: Certificate): boolean {
+    if (!this.issued(child)) {
+      return false
     }
-    throw new Error('Could not compute certificate digest.')
+
+    const agl = getHashAgl(this.signatureOID)
+    if (agl === '') {
+      return false
+    }
+
+    return this.publicKey.verify(child.tbsCertificate.toDER(), child.signature, agl)
   }
-
-  // Signs this certificate using the given private key.
-  // sign (key: Buffer, alg: string) {
-  //   // TODO: get signature OID from private key
-  //   const algorithmOID = getOID(alg + 'WithRSAEncryption')
-  //   const hasher = getHasher(algorithmOID)
-  //   if(hasher == null) {
-  //     throw new Error('Could not compute certificate digest: Unknown message digest algorithm OID.')
-  //   }
-  //   this.signatureOID = this.siginfo.algorithmOID = algorithmOID
-  //   this.tbsCertificate = getTBSCertificate(this)
-
-  //   // digest and sign
-  //   hasher.update(this.tbsCertificate.bytes)
-  //   // this.signature = key.sign(cert.md)
-  // }
-
-  // // Attempts verify the signature on the passed certificate using this certificate's public key.
-  // verify (child: Certificate): boolean {
-  //   if (!this.issued(child)) {
-  //     throw new Error('The parent certificate did not issue the given child')
-  //   }
-  //   return false // TODO
-  // }
 
   // Returns true if this certificate's issuer matches the passed
   // certificate's subject. Note that no signature check is performed.
@@ -600,62 +562,26 @@ export class Certificate {
   }
 
   // Generates the subjectKeyIdentifier for this certificate as byte buffer.
-  generateSubjectKeyIdentifier () {
-    /* See: 4.2.1.2 section of the the RFC3280, keyIdentifier is either:
-
-      (1) The keyIdentifier is composed of the 160-bit SHA-1 hash of the
-        value of the BIT STRING subjectPublicKey (excluding the tag,
-        length, and number of unused bits).
-
-      (2) The keyIdentifier is composed of a four bit type field with
-        the value 0100 followed by the least significant 60 bits of the
-        SHA-1 hash of the value of the BIT STRING subjectPublicKey
-        (excluding the tag, length, and number of unused bit string bits).
-    */
-
-    // skipping the tag, length, and number of unused bits is the same
-    // as just using the RSAPublicKey (for RSA keys, which are the
-    // only ones supported)
-    return getPublicKeyFingerprint(this.publicKey, { type: 'RSAPublicKey' })
+  generateSubjectKeyIdentifier (hasher?: Hash) {
+    if (hasher == null) {
+      hasher = createHash('sha1')
+    }
+    return this.publicKey.getFingerprint(hasher, 'RSAPublicKey')
   }
 
   // Verifies the subjectKeyIdentifier extension value for this certificate
   // against its public key. If no extension is found, false will be
   // returned.
   verifySubjectKeyIdentifier () {
-    const oid = getOID('subjectKeyIdentifier')
-    for (const ext of this.extensions) {
-      if (ext.id === oid) {
-        const ski = this.generateSubjectKeyIdentifier()
-        return ski.equals(ext.subjectKeyIdentifier)
-      }
-    }
-    return false
+    const ski = this.generateSubjectKeyIdentifier()
+    return ski.toString('hex') === this.subjectKeyIdentifier
   }
 
-  toASN1 (): ASN1 {
-    if (this.tbsCertificate == null) {
-      this.tbsCertificate = getTBSCertificate(this)
+  [inspect.custom] (_depth: any, options: any): string {
+    if (options.depth <= 2) {
+      options.depth = 10
     }
-    // Certificate
-    return ASN1.Seq([
-      // TBSCertificate
-      this.tbsCertificate as ASN1,
-      // AlgorithmIdentifier (signature algorithm)
-      ASN1.Seq([
-        // algorithm
-        ASN1.OID(this.signatureOID),
-        // parameters
-        signatureParametersToASN1(this.signatureOID, this.signatureParameters),
-      ]),
-      // SignatureValue
-      ASN1.BitString(this.signature as Buffer),
-    ])
-  }
-
-  // Converts an X.509 certificate to PEM format.
-  toPem () {
-    return new PEM('CERTIFICATE', this.toASN1().toDER())
+    return `<${this.constructor.name} ${inspect(this.toJSON(), options)}>`
   }
 }
 
@@ -664,6 +590,7 @@ export interface Extension {
   critical: boolean
   value: Buffer
   name: string
+  altNames?: any[]
   [index: string]: any
 }
 
@@ -693,6 +620,7 @@ function certificateExtensionFromAsn1 (ext: ASN1): Extension {
   } else {
     e.value = ext.value[1].bytes
   }
+
   // if the oid is known, get its name
   e.name = getOIDName(e.id)
   switch (e.name) {
@@ -701,11 +629,7 @@ function certificateExtensionFromAsn1 (ext: ASN1): Extension {
     decodeExtKeyUsage(e)
     break
   case 'basicConstraints':
-    try {
-      decodeExtBasicConstraints(e)
-    } catch (_e) {
-      // console.log(1111, _e)
-    }
+    decodeExtBasicConstraints(e)
     break
   case 'extKeyUsage':
     decodeExtExtKeyUsage(e)
@@ -720,20 +644,21 @@ function certificateExtensionFromAsn1 (ext: ASN1): Extension {
     decodeExtAltName(e)
     break
   case 'subjectKeyIdentifier':
-    // value is an OCTETSTRING w/the hash of the key-type specific
-    // public key structure (eg: RSAPublicKey)
-    e.subjectKeyIdentifier = e.value.toString('hex')
+    decodeExtSubjectKeyIdentifier(e)
     break
   case 'authorityKeyIdentifier':
-    e.authorityKeyIdentifier = e.value.toString('hex')
+    decodeExtAuthorityKeyIdentifier(e)
+    break
+  case 'authorityInfoAccess':
+    decodeExtAuthorityInfoAccess(e)
     break
   }
   return e
 }
 
 function decodeExtKeyUsage (e: Extension) {
-  // get value as OCTETSTRING
-  const ev = ASN1.parseBitString(e.value)
+  // ev is a BITSTRING
+  const ev = ASN1.parseBitString(ASN1.fromDER(e.value).bytes)
   let b2 = 0x00
   let b3 = 0x00
 
@@ -753,58 +678,6 @@ function decodeExtKeyUsage (e: Extension) {
   e.decipherOnly = (b3 & 0x80) === 0x80
 }
 
-function encodeExtKeyUsage (e: Extension) {
-  // build flags
-  let unused = 0
-  let b2 = 0x00
-  let b3 = 0x00
-  if (e.digitalSignature === true) {
-    b2 |= 0x80
-    unused = 7
-  }
-  if (e.nonRepudiation === true) {
-    b2 |= 0x40
-    unused = 6
-  }
-  if (e.keyEncipherment === true) {
-    b2 |= 0x20
-    unused = 5
-  }
-  if (e.dataEncipherment === true) {
-    b2 |= 0x10
-    unused = 4
-  }
-  if (e.keyAgreement === true) {
-    b2 |= 0x08
-    unused = 3
-  }
-  if (e.keyCertSign === true) {
-    b2 |= 0x04
-    unused = 2
-  }
-  if (e.cRLSign === true) {
-    b2 |= 0x02
-    unused = 1
-  }
-  if (e.encipherOnly === true) {
-    b2 |= 0x01
-    unused = 0
-  }
-  if (e.decipherOnly === true) {
-    b3 |= 0x80
-    unused = 7
-  }
-
-  // create bit string
-  const vals = []
-  if (b3 !== 0) {
-    vals.push(b2, b3)
-  } else if (b2 !== 0) {
-    vals.push(b2)
-  }
-  e.value = ASN1.BitString(new BitString(Buffer.from(vals), vals.length * 8 - unused)).toDER()
-}
-
 function decodeExtBasicConstraints (e: Extension) {
   // handle basic constraints
   // get value as SEQUENCE
@@ -812,9 +685,9 @@ function decodeExtBasicConstraints (e: Extension) {
   const vals = ev.mustCompound()
   // get cA BOOLEAN flag (defaults to false)
   if (vals.length > 0 && vals[0].tag === Tag.BOOLEAN) {
-    e.cA = ASN1.parseBool(vals[0].bytes)
+    e.isCA = ASN1.parseBool(vals[0].bytes)
   } else {
-    e.cA = false
+    e.isCA = false
   }
   // get path length constraint
   let value = null
@@ -825,22 +698,11 @@ function decodeExtBasicConstraints (e: Extension) {
   }
 
   if (value !== null) {
-    e.pathLenConstraint = ASN1.parseInteger(value)
+    e.maxPathLen = ASN1.parseInteger(value)
+  } else {
+    e.maxPathLen = -1
   }
-}
-
-function encodeExtBasicConstraints (e: Extension) {
-  // basicConstraints is a SEQUENCE
-  const vals: ASN1[] = []
-  // cA BOOLEAN flag defaults to false
-  if (e.cA === true) {
-    vals.push(ASN1.Bool(true))
-  }
-
-  if (e.pathLenConstraint != null) {
-    vals.push(ASN1.Integer(e.pathLenConstraint))
-  }
-  e.value = ASN1.Seq(vals).toDER()
+  e.basicConstraintsValid = true
 }
 
 function decodeExtExtKeyUsage (e: Extension) {
@@ -855,26 +717,9 @@ function decodeExtExtKeyUsage (e: Extension) {
   }
 }
 
-function encodeExtExtKeyUsage (e: Extension) {
-  // extKeyUsage is a SEQUENCE of OIDs
-  const vals: ASN1[] = []
-
-  for (const key of Object.keys(e)) {
-    if (e[key] !== true) {
-      continue
-    }
-    const oid = getOID(key)
-    if (oid !== '') {
-      vals.push(ASN1.OID(oid))
-    }
-  }
-  e.value = ASN1.Seq(vals).toDER()
-}
-
 function decodeExtNsCertType (e: Extension) {
-  // handle nsCertType
-  // get value as OCTETSTRING
-  const ev = ASN1.parseBitString(e.value)
+  // ev is a BITSTRING
+  const ev = ASN1.parseBitString(ASN1.fromDER(e.value).bytes)
   let b2 = 0x00
   if (ev.buf.length > 0) {
     b2 = ev.buf[0]
@@ -888,53 +733,6 @@ function decodeExtNsCertType (e: Extension) {
   e.sslCA = (b2 & 0x04) === 0x04
   e.emailCA = (b2 & 0x02) === 0x02
   e.objCA = (b2 & 0x01) === 0x01
-}
-
-function encodeExtNsCertType (e: Extension) {
-  // nsCertType is a OCTETSTRING
-  // build flags
-  let unused = 0
-  let b2 = 0x00
-
-  if (e.client === true) {
-    b2 |= 0x80
-    unused = 7
-  }
-  if (e.server === true) {
-    b2 |= 0x40
-    unused = 6
-  }
-  if (e.email === true) {
-    b2 |= 0x20
-    unused = 5
-  }
-  if (e.objsign === true) {
-    b2 |= 0x10
-    unused = 4
-  }
-  if (e.reserved === true) {
-    b2 |= 0x08
-    unused = 3
-  }
-  if (e.sslCA === true) {
-    b2 |= 0x04
-    unused = 2
-  }
-  if (e.emailCA === true) {
-    b2 |= 0x02
-    unused = 1
-  }
-  if (e.objCA === true) {
-    b2 |= 0x01
-    unused = 0
-  }
-
-  // create bit string
-  const vals = []
-  if (b2 !== 0) {
-    vals.push(b2)
-  }
-  e.value = ASN1.BitString(new BitString(Buffer.from(vals), vals.length * 8 - unused)).toDER()
 }
 
 function decodeExtAltName (e: Extension) {
@@ -952,14 +750,18 @@ function decodeExtAltName (e: Extension) {
     }
     e.altNames.push(item)
 
-    // Note: Support for types 1,2,6,7,8
     switch (gn.tag) {
-    // rfc822Name
+    // rfc822Name, emailAddresses
     case 1:
+      item.email = gn.bytes.toString()
+      break
     // dNSName
     case 2:
+      item.dnsName = gn.bytes.toString()
+      break
     // uniformResourceIdentifier (URI)
     case 6:
+      item.uri = gn.bytes.toString()
       break
     // IPAddress
     case 7:
@@ -976,185 +778,80 @@ function decodeExtAltName (e: Extension) {
   }
 }
 
-function encodeExtAltName (e: Extension) {
-  const vals: ASN1[] = []
-
-  for (const altName of e.altNames) {
-    let bytes = altName.value
-    // handle IP
-    if (altName.tag === 7 && altName.ip != null) {
-      bytes = bytesFromIP(altName.ip)
-      if (bytes == null) {
-        throw new Error('Extension "ip" value is not a valid IPv4 or IPv6 address.')
-      }
-    } else if (altName.tag === 8) {
-      // handle OID
-      if (altName.oid != null) {
-        bytes = ASN1.OID(altName.oid).toDER()
-      }
-    }
-    vals.push(ASN1.Spec(altName.tag as Tag, bytes, false))
-  }
-  e.value = ASN1.Seq(vals).toDER()
+const subjectKeyIdentifierValidator: Template = {
+  name: 'subjectKeyIdentifier',
+  class: Class.UNIVERSAL,
+  tag: Tag.OCTETSTRING,
+  capture: 'subjectKeyIdentifier',
 }
 
-function encodeExtSubjectKeyIdentifier (e: Extension, cert: Certificate) {
-  if (cert == null) {
-    return
-  }
-  const ski = cert.generateSubjectKeyIdentifier()
-  e.subjectKeyIdentifier = ski.toString('hex')
-  e.value = new ASN1(Class.UNIVERSAL, Tag.OCTETSTRING, ski).toDER()
+function decodeExtSubjectKeyIdentifier (e: Extension) {
+  const captures = ASN1.parseDERWithTemplate(e.value, subjectKeyIdentifierValidator)
+  e.subjectKeyIdentifier = captures.subjectKeyIdentifier.bytes.toString('hex')
 }
 
-function encodeExtAuthorityKeyIdentifier (e: Extension, cert: Certificate) {
-  if (cert == null) {
-    return
-  }
-  // SYNTAX SEQUENCE
-  const vals: ASN1[] = []
-
-  if (e.keyIdentifier != null) {
-    const keyIdentifier = e.keyIdentifier === true ? cert.generateSubjectKeyIdentifier() : e.keyIdentifier
-    vals.push(ASN1.Spec(0 as Tag, keyIdentifier, false))
-  }
-
-  if (e.authorityCertIssuer != null) {
-    const authorityCertIssuer = [
-      ASN1.Spec(4 as Tag, [
-        dnToASN1(e.authorityCertIssuer === true ? cert.issuer : e.authorityCertIssuer),
-      ]),
-    ]
-    vals.push(ASN1.Spec(1 as Tag, authorityCertIssuer))
-  }
-
-  if (e.serialNumber != null) {
-    const serialNumber = e.serialNumber === true ? cert.serialNumber : e.serialNumber
-    vals.push(ASN1.Spec(2 as Tag, serialNumber, false))
-  }
-  e.value = ASN1.Seq(vals).toDER()
+const authorityKeyIdentifierValidator: Template = {
+  name: 'authorityKeyIdentifier',
+  class: Class.UNIVERSAL,
+  tag: Tag.SEQUENCE,
+  value: [{
+    name: 'authorityKeyIdentifier.value',
+    class: Class.CONTEXT_SPECIFIC,
+    tag: Tag.NONE,
+    capture: 'authorityKeyIdentifier',
+  }],
 }
 
-function encodeExtCRLDistributionPoints (e: Extension) {
-  // Create fullName CHOICE
-  const fullNameGeneralNames: ASN1[] = []
-  for (const altName of e.altNames) {
-    let value = altName.value
-    // handle IP
-    if (altName.tag === 7 && altName.ip != null) {
-      value = bytesFromIP(altName.ip)
-      if (value === null) {
-        throw new Error('Extension "ip" value is not a valid IPv4 or IPv6 address.')
-      }
-    } else if (altName.tag === 8) {
-      // handle OID
-      if (altName.oid != null) {
-        value = ASN1.OID(altName.oid).toDER()
-      }
-    }
-
-    fullNameGeneralNames.push(ASN1.Spec(altName.tag as Tag, value, false))
-  }
-
-  // Add to the parent SEQUENCE
-  e.value = ASN1.Seq([
-    // Create sub SEQUENCE of DistributionPointName
-    ASN1.Seq([
-      ASN1.Spec(0 as Tag, [
-        ASN1.Spec(0 as Tag, fullNameGeneralNames),
-      ]),
-    ]),
-  ]).toDER()
+function decodeExtAuthorityKeyIdentifier (e: Extension) {
+  const captures = ASN1.parseDERWithTemplate(e.value, authorityKeyIdentifierValidator)
+  e.authorityKeyIdentifier = captures.authorityKeyIdentifier.bytes.toString('hex')
 }
 
-// Fills in missing fields in certificate extensions.
-function fillMissingExtensionFields (e: Extension, options: any = {}): Extension {
-  // populate missing name
-  if (e.name == null) {
-    e.name = getOIDName(e.id)
-  }
-
-  // populate missing id
-  if (e.id == null || e.id === '') {
-    e.id = getOID(e.name)
-  }
-
-  if (e.id === '') {
-    throw new Error('Extension ID not specified.')
-  }
-
-  if (e.value == null) {
-    return e
-  }
-
-  // handle missing value:
-  switch (e.name) {
-  case 'keyUsage':
-    encodeExtKeyUsage(e)
-    break
-  case 'basicConstraints':
-    encodeExtBasicConstraints(e)
-    break
-  case 'extKeyUsage':
-    encodeExtExtKeyUsage(e)
-    break
-  case 'nsCertType':
-    encodeExtNsCertType(e)
-    break
-  case 'subjectAltName':
-    encodeExtAltName(e)
-    break
-  case 'issuerAltName':
-    encodeExtAltName(e)
-    break
-  case 'subjectKeyIdentifier':
-    encodeExtSubjectKeyIdentifier(e, options.cert)
-    break
-  case 'authorityKeyIdentifier':
-    encodeExtAuthorityKeyIdentifier(e, options.cert)
-    break
-  case 'cRLDistributionPoints':
-    encodeExtCRLDistributionPoints(e)
-    break
-  }
-
-  // ensure value has been defined by now
-  if (e.value == null) {
-    throw new Error('Extension value not specified.')
-  }
-
-  return e
+const authorityInfoAccessValidator: Template = {
+  name: 'authorityInfoAccess',
+  class: Class.UNIVERSAL,
+  tag: Tag.SEQUENCE,
+  value: [{
+    name: 'authorityInfoAccess.authorityInfoAccessOcsp',
+    class: Class.UNIVERSAL,
+    tag: Tag.SEQUENCE,
+    optional: true,
+    value: [{
+      name: 'authorityInfoAccess.authorityInfoAccessOcsp.oid',
+      class: Class.UNIVERSAL,
+      tag: Tag.OID,
+    }, {
+      name: 'authorityInfoAccess.authorityInfoAccessOcsp.value',
+      class: Class.CONTEXT_SPECIFIC,
+      tag: Tag.OID,
+      capture: 'authorityInfoAccessOcsp',
+    }],
+  }, {
+    name: 'authorityInfoAccess.authorityInfoAccessIssuers',
+    class: Class.UNIVERSAL,
+    tag: Tag.SEQUENCE,
+    optional: true,
+    value: [{
+      name: 'authorityInfoAccess.authorityInfoAccessIssuers.oid',
+      class: Class.UNIVERSAL,
+      tag: Tag.OID,
+    }, {
+      name: 'authorityInfoAccess.authorityInfoAccessIssuers.value',
+      class: Class.CONTEXT_SPECIFIC,
+      tag: Tag.OID,
+      capture: 'authorityInfoAccessIssuers',
+    }],
+  }],
 }
 
-function dnToASN1 (obj: TargetInfo): ASN1 {
-  // iterate over attributes
-  const vals: ASN1[] = []
-  for (const attr of obj.attributes) {
-    let value = attr.value
-    // reuse tag class for attribute value if available
-    let valueTag = Tag.PRINTABLESTRING
-    if (attr.valueTag != null) {
-      valueTag = attr.valueTag
-    }
-    if (valueTag === Tag.UTF8) {
-      value = Buffer.from(value, 'utf8')
-    }
-    // TODO: handle more encodings
-
-    // create a RelativeDistinguishedName set
-    // each value in the set is an AttributeTypeAndValue first
-    // containing the type (an OID) and second the value
-    vals.push(ASN1.Set([
-      ASN1.Seq([
-        // AttributeType
-        ASN1.OID(attr.oid),
-        // AttributeValue
-        new ASN1(Class.UNIVERSAL, valueTag, value),
-      ]),
-    ]))
+function decodeExtAuthorityInfoAccess (e: Extension) {
+  const captures = ASN1.parseDERWithTemplate(e.value, authorityInfoAccessValidator)
+  if (captures.authorityInfoAccessOcsp != null) {
+    e.authorityInfoAccessOcsp = captures.authorityInfoAccessOcsp.bytes.toString()
   }
-
-  return ASN1.Seq(vals)
+  if (captures.authorityInfoAccessIssuers != null) {
+    e.authorityInfoAccessIssuers = captures.authorityInfoAccessIssuers.bytes.toString()
+  }
 }
 
 // Fills in missing fields in attributes.
@@ -1184,152 +881,27 @@ function fillMissingFields (attrs: Attribute[]) {
       attr.shortName = shortNames[attr.name] == null ? '' : shortNames[attr.name]
     }
 
-    // convert extensions to value
-    if (attr.oid === getOID('extensionRequest')) {
-      // attr.valueConstructed = true
-      attr.valueTag = Tag.SEQUENCE
-      if (attr.value == null && attr.extensions) {
-        attr.value = []
-        for (const ext of attr.extensions) {
-          attr.value.push(certificateExtensionToASN1(fillMissingExtensionFields(ext)))
-        }
-      }
-    }
-
     if (attr.value == null) {
       throw new Error('Attribute value not specified.')
     }
   }
 }
 
-function signatureParametersToASN1 (oid: string, params: any): ASN1 {
-  switch (oid) {
-  case getOID('RSASSA-PSS'):
-    const parts: ASN1[] = []
-
-    if (params.hash.algorithmOID != null) {
-      parts.push(ASN1.Spec(0 as Tag, ASN1.Seq([
-        ASN1.OID(params.hash.algorithmOID),
-        ASN1.Null(),
-      ])))
-    }
-
-    if (params.mgf.algorithmOID != null) {
-      parts.push(ASN1.Spec(1 as Tag, ASN1.Seq([
-        ASN1.Seq([
-          ASN1.OID(params.mgf.algorithmOID),
-          ASN1.Seq([
-            ASN1.OID(params.mgf.hash.algorithmOID),
-            ASN1.Null(),
-          ]),
-        ]),
-      ])))
-    }
-
-    if (params.saltLength != null) {
-      parts.push(ASN1.Spec(2 as Tag, ASN1.Integer(params.saltLength)))
-    }
-
-    return ASN1.Seq(parts)
-  default:
-    return ASN1.Null()
-  }
-}
-
-// Gets the ASN.1 TBSCertificate part of an X.509v3 certificate.
-function getTBSCertificate (cert: Certificate): ASN1 {
-  // TBSCertificate
-  const tbs: ASN1[] = [
-    // version
-    ASN1.Spec(0 as Tag, ASN1.Integer(cert.version)),
-    // serialNumber
-    ASN1.Integer(Buffer.from(cert.serialNumber, 'hex')),
-    // signature
-    ASN1.Seq([
-      // algorithm
-      ASN1.OID(cert.siginfo.algorithmOID),
-      // parameters
-      signatureParametersToASN1(cert.siginfo.algorithmOID, cert.siginfo.parameters),
-    ]),
-    // issuer
-    dnToASN1(cert.issuer),
-    // validity
-    ASN1.Seq([
-      // notBefore
-      ASN1.UTCTime(cert.validity.notBefore),
-      // notAfter
-      ASN1.UTCTime(cert.validity.notAfter),
-    ]),
-    // subject
-    dnToASN1(cert.subject),
-    // SubjectPublicKeyInfo
-    publicKeyToASN1(cert.publicKey as RSAPublicKey),
-  ]
-
-  if (cert.issuer.uniqueId != null) {
-    // issuerUniqueID (optional)
-    tbs.push(ASN1.Spec(1 as Tag, ASN1.BitString(cert.issuer.uniqueId)))
-  }
-
-  if (cert.subject.uniqueId != null) {
-    // subjectUniqueID (optional)
-    tbs.push(ASN1.Spec(2 as Tag, ASN1.BitString(cert.subject.uniqueId)))
-  }
-
-  if (cert.extensions.length > 0) {
-    // extensions (optional)
-    tbs.push(certificateExtensionsToASN1(cert.extensions))
-  }
-
-  return ASN1.Seq(tbs)
-}
-
-// Converts X.509v3 certificate extensions to ASN.1.
-function certificateExtensionsToASN1 (exts: Extension[]): ASN1 {
-  const seq = ASN1.Seq(exts.map(certificateExtensionToASN1))
-  return ASN1.Spec(3 as Tag, seq)
-}
-
-// Converts a single certificate extension to ASN.1.
-function certificateExtensionToASN1 (ext: Extension): ASN1 {
-
-  const vals: ASN1[] = []
-  // extnID (OID)
-  vals.push(ASN1.OID(ext.id))
-  // critical defaults to false
-  if (ext.critical) {
-    vals.push(ASN1.Bool(true))
-  }
-  // extnValue (OCTET STRING)
-  vals.push(new ASN1(Class.UNIVERSAL, Tag.OCTETSTRING, ext.value))
-
-  return ASN1.Seq(vals)
-}
-
-function getHasher (oid: string): Hash | null {
-  let algorithm = ''
+function getHashAgl (oid: string): string {
   switch (getOIDName(oid)) {
   case 'sha1WithRSAEncryption':
-    algorithm = 'sha1'
-    break
+    return 'sha1'
   case 'md5WithRSAEncryption':
-    algorithm = 'md5'
-    break
+    return 'md5'
   case 'sha256WithRSAEncryption':
-    algorithm = 'sha256'
-    break
+    return'sha256'
   case 'sha384WithRSAEncryption':
-    algorithm = 'sha384'
-    break
+    return 'sha384'
   case 'sha512WithRSAEncryption':
-    algorithm = 'sha512'
-    break
-  case 'RSASSA-PSS':
-    algorithm = 'sha256'
-    break
+    return 'sha512'
+  default:
+    return ''
   }
-
-  return algorithm !== '' ? createHash(algorithm) : null
 }
 
 // Converts an RDNSequence of ASN.1 DER-encoded RelativeDistinguishedName
@@ -1358,16 +930,6 @@ function RDNAttributesAsArray (rdn: ASN1): Attribute[] {
   return rval
 }
 
-// Gets an issuer or subject attribute from its name, type, or short name.
-function getAttribute (obj: { attributes: Attribute[] }, key: any): Attribute | null {
-  for (const attr of obj.attributes) {
-    if (key === attr.oid || key === attr.name || key === attr.shortName) {
-      return attr
-    }
-  }
-  return null
-}
-
 function readSignatureParameters (oid: string, obj: ASN1, fillDefaults: boolean) {
   const params = {} as any
 
@@ -1390,14 +952,20 @@ function readSignatureParameters (oid: string, obj: ASN1, fillDefaults: boolean)
   }
 
   if (capture.hashOID != null) {
-    params.hash = params.hash || {}
+    if (params.hash == null) {
+      params.hash = {}
+    }
     params.hash.algorithmOID = ASN1.parseOID(capture.hashOID.bytes)
   }
 
   if (capture.maskGenOID != null) {
-    params.mgf = params.mgf || {}
+    if (params.mgf == null) {
+      params.mgf = {}
+    }
     params.mgf.algorithmOID = ASN1.parseOID(capture.maskGenOID.bytes)
-    params.mgf.hash = params.mgf.hash || {}
+    if (params.mgf.hash == null) {
+      params.mgf.hash = {}
+    }
     params.mgf.hash.algorithmOID = ASN1.parseOID(capture.maskGenHashOID.bytes)
   }
 
@@ -1408,75 +976,9 @@ function readSignatureParameters (oid: string, obj: ASN1, fillDefaults: boolean)
   return params
 }
 
-function getPublicKeyFingerprint (key: any, options: any): Buffer {
-  options = options || {}
-  const md = options.md // || forge.md.sha1.create();
-  const type = options.type || 'RSAPublicKey';
-
-  let bytes
-  switch (type) {
-  case 'RSAPublicKey':
-    bytes = publicKeyToRSAPublicKey(key).toDER()
-    break;
-  case 'SubjectPublicKeyInfo':
-    bytes = publicKeyToASN1(key).toDER()
-    break;
-  default:
-    throw new Error('Unknown fingerprint type "' + options.type + '".')
+function toJSONify (val: any): any {
+  if (val != null && !(val instanceof Buffer) && typeof val.toJSON === 'function') {
+    return val.toJSON()
   }
-
-  // hash public key bytes
-  md.start()
-  md.update(bytes)
-  return md.digest()
-}
-
-function publicKeyToRSAPublicKey (key: RSAPublicKey): ASN1 {
-  // RSAPublicKey
-  return ASN1.Seq([
-    // modulus (n)
-    ASN1.Integer(Buffer.from(key.n, 'hex')),
-    // publicExponent (e)
-    ASN1.Integer(Buffer.from(key.e, 'hex')),
-  ])
-}
-
-function publicKeyToASN1 (key: RSAPublicKey): ASN1 {
-  // SubjectPublicKeyInfo
-  return ASN1.Seq([
-    // AlgorithmIdentifier
-    ASN1.Seq([
-      // algorithm
-      ASN1.OID(getOID('rsaEncryption')),
-      // parameters (null)
-      ASN1.Null(),
-    ]),
-    // subjectPublicKey
-    ASN1.BitString(publicKeyToRSAPublicKey(key).toDER()),
-  ])
-}
-
-function publicKeyFromASN1 (obj: ASN1): RSAPublicKey {
-  // get SubjectPublicKeyInfo
-  const captures: Captures = Object.create(null)
-  let err = obj.validate(publicKeyValidator, captures)
-  if (err != null) {
-    throw new Error('Cannot read X.509 public key: ' + err.message)
-  }
-
-  const oid = ASN1.parseOID(captures.publicKeyOID.bytes)
-  if (oid !== getOID('rsaEncryption')) {
-    throw new Error('Cannot read public key. Unknown OID.')
-  }
-
-  // get RSA params
-  err = captures.rsaPublicKey.validate(rsaPublicKeyValidator, captures)
-  if (err != null) {
-    throw new Error('Cannot read X.509 public key: ' + err.message)
-  }
-
-  return {
-    n: captures.publicKeyModulus.bytes.toString('hex'),
-    e: captures.publicKeyExponent.bytes.toString('hex'),
-  }
+  return val
 }

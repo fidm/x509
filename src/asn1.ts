@@ -131,7 +131,7 @@ export class ASN1 {
   static Integer (num: number | Buffer): ASN1 {
     if (num instanceof Buffer) {
       const asn = new ASN1(Class.UNIVERSAL, Tag.INTEGER, num)
-      asn._value = '0x' + num.toString('hex')
+      asn._value = num.toString('hex')
       return asn
     }
 
@@ -172,6 +172,9 @@ export class ASN1 {
     // some INTEGER will be 16 bytes, 32 bytes or others.
     // CertificateSerialNumber ::= INTEGER (>= 16 bytes)
     if (buf.length > 6) {
+      // if (buf[0] === 0) {
+      //   buf = buf.slice(1)
+      // }
       return buf.toString('hex')
     }
     return buf.readIntBE(0, buf.length)
@@ -188,7 +191,7 @@ export class ASN1 {
   static parseIntegerStr (buf: Buffer): string {
     const value = ASN1.parseInteger(buf)
     if (typeof value === 'number') {
-      return '0x' + value.toString(16)
+      return value.toString(16)
     }
     return value as string
   }
@@ -623,6 +626,17 @@ export class ASN1 {
     return ASN1._fromDER(new BufferVisitor(buf), deepParse)
   }
 
+  static parseDERWithTemplate (buf: Buffer, tpl: Template): Captures {
+    const obj = ASN1._fromDER(new BufferVisitor(buf), true)
+    const captures: Captures = {}
+    const err = obj.validate(tpl, captures) as any
+    if (err != null) {
+      err.data = obj
+      throw err
+    }
+    return captures
+  }
+
   private static _parseCompound (buf: Buffer, deepParse: boolean): ASN1[] {
     const values = []
     const len = buf.length
@@ -647,7 +661,7 @@ export class ASN1 {
     // value storage
     const valueLen = getValueLength(bufv)
     bufv.mustHas(valueLen)
-    if (valueLen === 0 && tag !== Tag.NULL || (valueLen !== 0 && tag === Tag.NULL)) {
+    if (valueLen !== 0 && tag === Tag.NULL) {
       throw new Error('invalid value length or NULL tag.')
     }
 
@@ -719,7 +733,7 @@ export class ASN1 {
       buf.writeUInt8(this.bytes.length, 1)
       this.bytes.copy(buf, 2)
     } else {
-      buf.writeUInt8(valueLenBytes, 1)
+      buf.writeUInt8(valueLenBytes | 0x80, 1)
       buf.writeUIntBE(this.bytes.length, 2, valueLenBytes)
       this.bytes.copy(buf, 2 + valueLenBytes)
     }
@@ -823,10 +837,6 @@ export class ASN1 {
     return null
   }
 
-  toString (): string {
-    return JSON.stringify(this.toJSON())
-  }
-
   toJSON () {
     let value = this.value
     if (Array.isArray(value)) {
@@ -839,8 +849,11 @@ export class ASN1 {
     }
   }
 
-  [inspect.custom] (_depth: any, _options: any): string {
-    return `<${this.constructor.name} ${this.toString()}>`
+  [inspect.custom] (_depth: any, options: any): string {
+    if (options.depth <= 2) {
+      options.depth = 10
+    }
+    return `<${this.constructor.name} ${inspect(this.toJSON(), options)}>`
   }
 }
 

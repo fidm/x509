@@ -249,6 +249,7 @@ initOID('2.5.4.7', 'localityName')
 initOID('2.5.4.8', 'stateOrProvinceName')
 initOID('2.5.4.10', 'organizationName')
 initOID('2.5.4.11', 'organizationalUnitName')
+initOID('2.5.4.15', 'businessCategory')
 
 // X.509 extension OIDs
 initOID('2.16.840.1.113730.1.1', 'nsCertType')
@@ -293,6 +294,8 @@ initOID('2.5.29.46', 'freshestCRL', true)
 initOID('2.5.29.54', 'inhibitAnyPolicy', true)
 
 // extKeyUsage purposes
+initOID('1.3.6.1.4.1.311.60.2.1.2', 'jurisdictionST')
+initOID('1.3.6.1.4.1.311.60.2.1.3', 'jurisdictionC')
 initOID('1.3.6.1.4.1.11129.2.4.2', 'timestampList')
 initOID('1.3.6.1.5.5.7.1.1', 'authorityInfoAccess')
 initOID('1.3.6.1.5.5.7.3.1', 'serverAuth')
@@ -300,3 +303,5 @@ initOID('1.3.6.1.5.5.7.3.2', 'clientAuth')
 initOID('1.3.6.1.5.5.7.3.3', 'codeSigning')
 initOID('1.3.6.1.5.5.7.3.4', 'emailProtection')
 initOID('1.3.6.1.5.5.7.3.8', 'timeStamping')
+initOID('1.3.6.1.5.5.7.48.1', 'authorityInfoAccessOcsp')
+initOID('1.3.6.1.5.5.7.48.2', 'authorityInfoAccessIssuers')
