@@ -42,7 +42,7 @@ export class PEM {
 
   type: string // The type, taken from the preamble (i.e. "RSA PRIVATE KEY").
   body: Buffer // The decoded bytes of the contents. Typically a DER encoded ASN.1 structure.
-  headers: { [index: string]: string } // Optional headers.
+  private headers: { [index: string]: string } // Optional headers.
   constructor (type: string, body: Buffer) {
     this.type = type
     this.body = body
@@ -99,10 +99,6 @@ export class PEM {
     return rVal
   }
 
-  [inspect.custom] (_depth: any, options: any): string {
-    return `<${this.constructor.name} ${inspect(this.toJSON(), options)}>`
-  }
-
   valueOf () {
     return this.body
   }
@@ -113,6 +109,10 @@ export class PEM {
       body: this.body,
       headers: this.headers,
     }
+  }
+
+  [inspect.custom] (_depth: any, options: any): string {
+    return `<${this.constructor.name} ${inspect(this.toJSON(), options)}>`
   }
 }
 
@@ -147,7 +147,7 @@ function parse (lines: string[]): PEM {
   }
 
   const pem = new PEM(type, Buffer.from(body, 'base64'))
-  if (pem.body.toString('base64') !== body) {
+  if (body === '' || pem.body.toString('base64') !== body) {
     throw new Error('pem: invalid base64 body')
   }
   for (const header of headers) {

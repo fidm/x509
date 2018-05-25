@@ -1,10 +1,10 @@
 {
   "name": "@fidm/x509",
-  "description": "X509 certificate tools for Node.js, includes PEM, ASN1 with DER.",
+  "description": "Pure JavaScript X509 certificate tools for Node.js, includes PEM, ASN1 with DER.",
   "authors": [
     "Yan Qing <admin@zensh.com>"
   ],
-  "version": "0.3.0",
+  "version": "0.4.0",
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "license": "MIT",
@@ -30,9 +30,10 @@
   "devDependencies": {
     "@types/node": "^10.1.2",
     "tman": "^1.7.4",
-    "ts-node": "^6.0.3",
+    "ts-node": "^6.0.5",
     "tslint": "^5.10.0",
     "tslint-eslint-rules": "^5.3.1",
+    "tweetnacl": "^1.0.0",
     "typescript": "^2.8.3"
   },
   "scripts": {

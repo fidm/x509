@@ -9,7 +9,7 @@ import { BufferVisitor, getOID, getOIDName } from './common'
 export interface Template {
   name: string
   class: Class
-  tag: Tag
+  tag: Tag | Tag[]
   optional?: boolean
   capture?: string
   value?: Template | Template[]
@@ -55,8 +55,8 @@ export enum Tag {
 }
 
 export class BitString {
-  buf: Buffer
-  bitLen: number
+  readonly buf: Buffer
+  readonly bitLen: number
   constructor (buf: Buffer, bitLen: number) {
     this.buf = buf
     this.bitLen = bitLen
@@ -114,7 +114,7 @@ export class ASN1 {
   }
 
   static parseBool (buf: Buffer): boolean {
-    if (buf.length !== 1) {
+    if (!(buf instanceof Buffer) || buf.length !== 1) {
       throw new Error('ASN1 syntax error: invalid boolean')
     }
     switch (buf[0]) {
@@ -166,7 +166,7 @@ export class ASN1 {
   }
 
   static parseInteger (buf: Buffer): number | string {
-    if (buf.length === 0) {
+    if (!(buf instanceof Buffer) || buf.length === 0) {
       throw new Error('ASN1 syntax error: invalid Integer')
     }
     // some INTEGER will be 16 bytes, 32 bytes or others.
@@ -212,7 +212,7 @@ export class ASN1 {
   // bit string is padded up to the nearest byte in memory and the number of
   // valid bits is recorded. Padding bits will be zero.
   static parseBitString (buf: Buffer): BitString {
-    if (buf.length === 0) {
+    if (!(buf instanceof Buffer) || buf.length === 0) {
       throw new Error('ASN1 syntax error: invalid BitString')
     }
 
@@ -234,7 +234,7 @@ export class ASN1 {
   }
 
   static parseNull (buf: Buffer): null {
-    if (buf.length !== 0) {
+    if (!(buf instanceof Buffer) || buf.length !== 0) {
       throw new Error('ASN1 syntax error: invalid null')
     }
     return null
@@ -274,6 +274,9 @@ export class ASN1 {
   }
 
   static parseOID (buf: Buffer): string {
+    if (!(buf instanceof Buffer)) {
+      throw new Error('parse ASN1 error: invalid Buffer')
+    }
     // first byte is 40 * value1 + value2
     let oid = Math.floor(buf[0] / 40) + '.' + (buf[0] % 40)
 
@@ -306,6 +309,9 @@ export class ASN1 {
   }
 
   static parseUTF8 (buf: Buffer): string {
+    if (!(buf instanceof Buffer)) {
+      throw new Error('parse ASN1 error: invalid Buffer')
+    }
     return buf.toString('utf8')
   }
 
@@ -320,6 +326,9 @@ export class ASN1 {
   }
 
   static parseNumericString (buf: Buffer): string {
+    if (!(buf instanceof Buffer)) {
+      throw new Error('parse ASN1 error: invalid Buffer')
+    }
     const str = buf.toString('utf8')
     if (!isNumericString(str)) {
       throw new Error('ASN1 syntax error: invalid NumericString')
@@ -336,6 +345,9 @@ export class ASN1 {
   }
 
   static parsePrintableString (buf: Buffer): string {
+    if (!(buf instanceof Buffer)) {
+      throw new Error('parse ASN1 error: invalid Buffer')
+    }
     // TODO, validate
     return buf.toString('utf8')
   }
@@ -351,6 +363,9 @@ export class ASN1 {
   }
 
   static parseIA5String (buf: Buffer): string {
+    if (!(buf instanceof Buffer)) {
+      throw new Error('parse ASN1 error: invalid Buffer')
+    }
     const str = buf.toString('utf8')
     if (!isIA5String(str)) {
       throw new Error('ASN1 syntax error: invalid IA5String')
@@ -367,6 +382,9 @@ export class ASN1 {
   }
 
   static parseT61String (buf: Buffer): string {
+    if (!(buf instanceof Buffer)) {
+      throw new Error('parse ASN1 error: invalid Buffer')
+    }
     // TODO, validate
     return buf.toString('utf8')
   }
@@ -380,6 +398,9 @@ export class ASN1 {
   }
 
   static parseGeneralString (buf: Buffer): string {
+    if (!(buf instanceof Buffer)) {
+      throw new Error('parse ASN1 error: invalid Buffer')
+    }
     // TODO, validate
     return buf.toString('utf8')
   }
@@ -415,6 +436,9 @@ export class ASN1 {
   // Note: GeneralizedTime has 4 digits for the year and is used for X.509
   // dates past 2049. Parsing that structure hasn't been implemented yet.
   static parseUTCTime (buf: Buffer): Date {
+    if (!(buf instanceof Buffer)) {
+      throw new Error('parse ASN1 error: invalid Buffer')
+    }
     const utc = buf.toString('utf8')
     /* The following formats can be used:
 
@@ -520,6 +544,9 @@ export class ASN1 {
 
   // Converts a GeneralizedTime value to a date.
   static parseGeneralizedTime (buf: Buffer): Date {
+    if (!(buf instanceof Buffer)) {
+      throw new Error('parse ASN1 error: invalid Buffer')
+    }
     const gentime = buf.toString('utf8')
     /* The following formats can be used:
 
@@ -598,6 +625,17 @@ export class ASN1 {
     return date
   }
 
+  static parseTime (tag: Tag, buf: Buffer): Date {
+    switch (tag) {
+    case Tag.UTCTIME:
+      return ASN1.parseUTCTime(buf)
+    case Tag.GENERALIZEDTIME:
+      return ASN1.parseGeneralizedTime(buf)
+    default:
+      throw new Error('Invalid ASN1 time tag')
+    }
+  }
+
   static Set (objs: ASN1[]): ASN1 {
     const asn1 = new ASN1(Class.UNIVERSAL, Tag.SET, Buffer.concat(objs.map((obj) => obj.toDER())))
     asn1._value = objs
@@ -654,7 +692,8 @@ export class ASN1 {
   private static _fromDER (bufv: BufferVisitor, deepParse: boolean): ASN1 {
     bufv.mustWalk(1, 'Too few bytes to read ASN.1 tag.')
 
-    const b1 = bufv.buf[bufv.start]
+    const start = bufv.start
+    const b1 = bufv.buf[start]
     const tagClass = b1 & 0xc0
     const tag = b1 & 0x1f
 
@@ -671,15 +710,16 @@ export class ASN1 {
     if (isCompound && deepParse) {
       asn1._value = ASN1._parseCompound(asn1.bytes, deepParse)
     }
-
+    asn1._der = bufv.buf.slice(start, bufv.end)
     return asn1
   }
 
-  class: Class
-  tag: Tag
-  bytes: Buffer
-  isCompound: boolean
+  readonly class: Class
+  readonly tag: Tag
+  readonly bytes: Buffer
+  readonly isCompound: boolean
   private _value: any
+  private _der: Buffer | null
   constructor (tagClass: Class, tag: Tag, data: Buffer, isCompound: boolean = false) {
     this.class = tagClass
     this.tag = tag
@@ -687,6 +727,7 @@ export class ASN1 {
     // CONTEXT_SPECIFIC, SEQUENCE, SET, others...
     this.isCompound = isCompound || tag === Tag.SEQUENCE || tag === Tag.SET
     this._value = undefined
+    this._der = null
   }
 
   get value () {
@@ -694,6 +735,13 @@ export class ASN1 {
       this._value = this.valueOf()
     }
     return this._value
+  }
+
+  get DER (): Buffer {
+    if (this._der == null) {
+      this._der = this.toDER()
+    }
+    return this._der
   }
 
   mustCompound (msg: string = 'asn1 object value is not compound'): ASN1[] {
@@ -760,9 +808,7 @@ export class ASN1 {
     case Tag.NULL:
       return ASN1.parseNull(this.bytes)
     case Tag.OID:
-      const oid = ASN1.parseOID(this.bytes)
-      const name = getOIDName(oid)
-      return name === '' ? oid : name
+      return getOIDName(ASN1.parseOID(this.bytes))
     case Tag.UTF8:
       return ASN1.parseUTF8(this.bytes)
     case Tag.NUMERICSTRING:
@@ -807,7 +853,9 @@ export class ASN1 {
     if (this.class !== tpl.class) {
       return new Error(`ASN.1 object validate failure for ${tpl.name} : error class ${Class[this.class]}`)
     }
-    if (this.tag !== tpl.tag) {
+
+    const tplTags = Array.isArray(tpl.tag) ? tpl.tag : [tpl.tag]
+    if (!tplTags.includes(this.tag)) {
       return new Error(`ASN.1 object validate failure for ${tpl.name}: error tag ${Tag[this.tag]}`)
     }
 

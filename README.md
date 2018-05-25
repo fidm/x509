@@ -1,7 +1,12 @@
 # x509
-X509 certificate tools for Node.js, includes PEM, ASN1 with DER.
+Pure JavaScript X509 certificate tools for Node.js, includes PEM, ASN1 with DER.
 
-Inspired by https://github.com/digitalbazaar/forge
+[![NPM version][npm-image]][npm-url]
+[![Build Status][travis-image]][travis-url]
+[![Coverage Status][coveralls-image]][coveralls-url]
+[![Downloads][downloads-image]][downloads-url]
+
+## Inspired by https://github.com/digitalbazaar/forge
 
 ## example
 
@@ -193,3 +198,15 @@ console.log(cert)
 ### Class: RSAPublicKey
 
 ### Class: Certificate
+
+[npm-url]: https://www.npmjs.com/package/@fidm/x509
+[npm-image]: https://img.shields.io/npm/v/@fidm/x509.svg
+
+[travis-url]: https://travis-ci.org/fidm/x509
+[travis-image]: https://img.shields.io/travis/fidm/x509.svg
+
+[coveralls-url]: https://coveralls.io/r/fidm/x509
+[coveralls-image]: https://coveralls.io/repos/fidm/x509/badge.svg
+
+[downloads-url]: https://npmjs.org/package/@fidm/x509
+[downloads-image]: https://img.shields.io/npm/dm/@fidm/x509.svg?style=flat-square

@@ -4,11 +4,11 @@
 // **License:** MIT
 
 import { inspect } from 'util'
-import { createHash, Hash } from 'crypto'
+import { createHash } from 'crypto'
 import { bytesToIP, getOID, getOIDName } from './common'
 import { ASN1, Class, Tag, Template, Captures, BitString } from './asn1'
 import { PEM } from './pem'
-import { publicKeyValidator, RSAPublicKey } from './rsa'
+import { publicKeyValidator, PublicKey } from './pki'
 
 // short name OID mappings
 const shortNames = Object.create(null)
@@ -82,38 +82,16 @@ const x509CertificateValidator: Template = {
       name: 'Certificate.TBSCertificate.validity',
       class: Class.UNIVERSAL,
       tag: Tag.SEQUENCE,
-      // Note: UTC and generalized times may both appear so the capture
-      // names are based on their detected order, the names used below
-      // are only for the common case, which validity time really means
-      // "notBefore" and which means "notAfter" will be determined by order
       value: [{
-        // notBefore (Time) (UTC time case)
-        name: 'Certificate.TBSCertificate.validity.notBefore (utc)',
+        name: 'Certificate.TBSCertificate.validity.notBefore',
         class: Class.UNIVERSAL,
-        tag: Tag.UTCTIME,
-        optional: true,
-        capture: 'certValidity1UTCTime',
+        tag: [Tag.UTCTIME, Tag.GENERALIZEDTIME],
+        capture: 'certValidityNotBefore',
       }, {
-        // notBefore (Time) (generalized time case)
-        name: 'Certificate.TBSCertificate.validity.notBefore (generalized)',
+        name: 'Certificate.TBSCertificate.validity.notAfter',
         class: Class.UNIVERSAL,
-        tag: Tag.GENERALIZEDTIME,
-        optional: true,
-        capture: 'certValidity2GeneralizedTime',
-      }, {
-        // notAfter (Time) (only UTC time is supported)
-        name: 'Certificate.TBSCertificate.validity.notAfter (utc)',
-        class: Class.UNIVERSAL,
-        tag: Tag.UTCTIME,
-        optional: true,
-        capture: 'certValidity3UTCTime',
-      }, {
-        // notAfter (Time) (only UTC time is supported)
-        name: 'Certificate.TBSCertificate.validity.notAfter (generalized)',
-        class: Class.UNIVERSAL,
-        tag: Tag.GENERALIZEDTIME,
-        optional: true,
-        capture: 'certValidity4GeneralizedTime',
+        tag: [Tag.UTCTIME, Tag.GENERALIZEDTIME],
+        capture: 'certValidityNotAfter',
       }],
     }, {
       // Name (subject) (RDNSequence)
@@ -170,89 +148,15 @@ const x509CertificateValidator: Template = {
     }, {
       name: 'Certificate.TBSCertificate.signature.parameters',
       class: Class.UNIVERSAL,
-      tag: Tag.OCTETSTRING, // ?
+      tag: Tag.OCTETSTRING,
       optional: true,
       capture: 'certSignatureParams',
     }],
   }, {
-    // SignatureValue
     name: 'Certificate.signatureValue',
     class: Class.UNIVERSAL,
     tag: Tag.BITSTRING,
     capture: 'certSignature',
-  }],
-}
-
-const rsassaPssParameterValidator: Template = {
-  name: 'rsapss',
-  class: Class.UNIVERSAL,
-  tag: Tag.SEQUENCE,
-  value: [{
-    name: 'rsapss.hashAlgorithm',
-    class: Class.CONTEXT_SPECIFIC,
-    tag: Tag.NONE,
-    value: [{
-      name: 'rsapss.hashAlgorithm.AlgorithmIdentifier',
-      class: Class.UNIVERSAL,
-      tag: Tag.SEQUENCE,
-      optional: true,
-      value: [{
-        name: 'rsapss.hashAlgorithm.AlgorithmIdentifier.algorithm',
-        class: Class.UNIVERSAL,
-        tag: Tag.OID,
-        capture: 'hashOID',
-        /* parameter block omitted, for SHA1 NULL anyhow. */
-      }],
-    }],
-  }, {
-    name: 'rsapss.maskGenAlgorithm',
-    class: Class.CONTEXT_SPECIFIC,
-    tag: Tag.BOOLEAN,
-    value: [{
-      name: 'rsapss.maskGenAlgorithm.AlgorithmIdentifier',
-      class: Class.UNIVERSAL,
-      tag: Tag.SEQUENCE,
-      optional: true,
-      value: [{
-        name: 'rsapss.maskGenAlgorithm.AlgorithmIdentifier.algorithm',
-        class: Class.UNIVERSAL,
-        tag: Tag.OID,
-        capture: 'maskGenOID',
-      }, {
-        name: 'rsapss.maskGenAlgorithm.AlgorithmIdentifier.params',
-        class: Class.UNIVERSAL,
-        tag: Tag.SEQUENCE,
-        value: [{
-          name: 'rsapss.maskGenAlgorithm.AlgorithmIdentifier.params.algorithm',
-          class: Class.UNIVERSAL,
-          tag: Tag.OID,
-          capture: 'maskGenHashOID',
-          /* parameter block omitted, for SHA1 NULL anyhow. */
-        }],
-      }],
-    }],
-  }, {
-    name: 'rsapss.saltLength',
-    class: Class.CONTEXT_SPECIFIC,
-    tag: Tag.INTEGER,
-    optional: true,
-    value: [{
-      name: 'rsapss.saltLength.saltLength',
-      class: Class.UNIVERSAL,
-      tag: Tag.INTEGER,
-      capture: 'saltLength',
-    }],
-  }, {
-    name: 'rsapss.trailerField',
-    class: Class.CONTEXT_SPECIFIC,
-    tag: Tag.BITSTRING,
-    optional: true,
-    value: [{
-      name: 'rsapss.trailer.trailer',
-      class: Class.UNIVERSAL,
-      tag: Tag.INTEGER,
-      capture: 'trailer',
-    }],
   }],
 }
 
@@ -351,28 +255,38 @@ export class DistinguishedName {
 // Creates an empty X.509v3 RSA certificate.
 export class Certificate {
   // Converts an X.509 certificate from PEM format.
-  static fromPEM (pem: Buffer): Certificate {
-    const msg = PEM.parse(pem)[0]
+  static fromPEMs (data: Buffer): Certificate[] {
+    const certs = []
+    const pems = PEM.parse(data)
 
-    if (msg.type !== 'CERTIFICATE' &&
-      msg.type !== 'X509 CERTIFICATE' &&
-      msg.type !== 'TRUSTED CERTIFICATE') {
-      throw new Error('Could not convert certificate from PEM: invalid type')
-    }
-    if (msg.procType.includes('ENCRYPTED')) {
-      throw new Error('Could not convert certificate from PEM; PEM is encrypted.')
-    }
+    for (const pem of pems) {
+      if (pem.type !== 'CERTIFICATE' &&
+        pem.type !== 'X509 CERTIFICATE' &&
+        pem.type !== 'TRUSTED CERTIFICATE') {
+        throw new Error('Could not convert certificate from PEM: invalid type')
+      }
+      if (pem.procType.includes('ENCRYPTED')) {
+        throw new Error('Could not convert certificate from PEM; PEM is encrypted.')
+      }
 
-    const obj = ASN1.fromDER(msg.body)
-    return new Certificate(obj)
+      const obj = ASN1.fromDER(pem.body)
+      certs.push(new Certificate(obj))
+    }
+    if (certs.length === 0) {
+      throw new Error('No Certificate')
+    }
+    return certs
+  }
+
+  static fromPEM (data: Buffer): Certificate {
+    return Certificate.fromPEMs(data)[0]
   }
 
   readonly version: number
   readonly serialNumber: string
   readonly signatureOID: string
   readonly signatureAlgorithm: string
-  readonly signatureParameters: any
-  readonly siginfo: any
+  readonly infoSignatureOID: string
   readonly signature: Buffer
   readonly subjectKeyIdentifier: string
   readonly authorityKeyIdentifier: string
@@ -381,6 +295,7 @@ export class Certificate {
   readonly isCA: boolean
   readonly maxPathLen: number
   readonly basicConstraintsValid: boolean
+  readonly keyUsage: number
   readonly dnsNames: string[]
   readonly emailAddresses: string[]
   readonly ipAddresses: string[]
@@ -390,7 +305,7 @@ export class Certificate {
   readonly issuer: DistinguishedName
   readonly subject: DistinguishedName
   readonly extensions: Extension[]
-  readonly publicKey: RSAPublicKey
+  readonly publicKey: PublicKey
   readonly publicKeyRaw: Buffer
   readonly tbsCertificate: ASN1
   constructor (obj: ASN1) {
@@ -401,45 +316,16 @@ export class Certificate {
       throw new Error('Cannot read X.509 certificate: ' + err.message)
     }
 
-    // get oid
-    const oid = ASN1.parseOID(captures.publicKeyOID.bytes)
-    if (oid !== getOID('rsaEncryption')) {
-      throw new Error('Cannot read public key. OID is not RSA.')
-    }
-
-    // create certificate
-    this.version = captures.certVersion == null ? 0 : ASN1.parseIntegerNum(captures.certVersion.bytes)
+    this.version = captures.certVersion == null ? 0 : (ASN1.parseIntegerNum(captures.certVersion.bytes) + 1)
     this.serialNumber = ASN1.parseIntegerStr(captures.certSerialNumber.bytes)
     this.signatureOID = ASN1.parseOID(captures.certSignatureOID.bytes)
     this.signatureAlgorithm = getOIDName(this.signatureOID)
-    this.signatureParameters = null
-    if (captures.certSignatureParams != null) {
-      this.signatureParameters = readSignatureParameters(this.signatureOID, captures.certSignatureParams, true)
-    }
 
-    this.siginfo = {}
-    this.siginfo.algorithmOID = ASN1.parseOID(captures.certinfoSignatureOID.bytes)
-    if (captures.certinfoSignatureParams != null) {
-      this.siginfo.parameters =
-        readSignatureParameters(this.siginfo.algorithmOID, captures.certinfoSignatureParams, false)
-    }
+    this.infoSignatureOID = ASN1.parseOID(captures.certinfoSignatureOID.bytes)
     this.signature = ASN1.parseBitString(captures.certSignature.bytes).buf
 
-    if (captures.certValidity1UTCTime != null) {
-      this.validFrom = ASN1.parseUTCTime(captures.certValidity1UTCTime.bytes)
-    } else if (captures.certValidity2GeneralizedTime != null) {
-      this.validFrom = ASN1.parseGeneralizedTime(captures.certValidity2GeneralizedTime.bytes)
-    } else {
-      throw new Error('Cannot read notBefore validity times')
-    }
-
-    if (captures.certValidity3UTCTime != null) {
-      this.validTo = ASN1.parseUTCTime(captures.certValidity3UTCTime.bytes)
-    } else if (captures.certValidity4GeneralizedTime != null) {
-      this.validTo = ASN1.parseGeneralizedTime(captures.certValidity4GeneralizedTime.bytes)
-    } else {
-      throw new Error('Cannot read notAfter validity times')
-    }
+    this.validFrom = ASN1.parseTime(captures.certValidityNotBefore.tag, captures.certValidityNotBefore.bytes)
+    this.validTo = ASN1.parseTime(captures.certValidityNotAfter.tag, captures.certValidityNotAfter.bytes)
 
     this.issuer = new DistinguishedName()
     this.issuer.setAttrs(RDNAttributesAsArray(captures.certIssuer))
@@ -461,6 +347,7 @@ export class Certificate {
     this.isCA = false
     this.maxPathLen = -1
     this.basicConstraintsValid = false
+    this.keyUsage = 0
     this.dnsNames = []
     this.emailAddresses = []
     this.ipAddresses = []
@@ -485,6 +372,9 @@ export class Certificate {
           this.maxPathLen = ext.maxPathLen
           this.basicConstraintsValid = ext.basicConstraintsValid
         }
+        if (typeof ext.keyUsage === 'number') {
+          this.keyUsage = ext.keyUsage
+        }
 
         if (Array.isArray(ext.altNames)) {
           for (const item of ext.altNames) {
@@ -505,9 +395,8 @@ export class Certificate {
       }
     }
 
-    // convert RSA public key from ASN.1
-    this.publicKey = RSAPublicKey.fromPublicKeyASN1(captures.subjectPublicKeyInfo)
-    this.publicKeyRaw = captures.subjectPublicKeyInfo.toDER()
+    this.publicKey = new PublicKey(captures.publicKeyInfo)
+    this.publicKeyRaw = this.publicKey.toDER()
     this.tbsCertificate = captures.tbsCertificate
   }
 
@@ -521,32 +410,44 @@ export class Certificate {
   }
 
   // Gets an extension by its name or id.
-  getExtension (options: any) {
-    if (typeof options === 'string') {
-      options = { name: options }
-    }
-
+  getExtension (name: string, key: string = ''): any {
     for (const ext of this.extensions) {
-      if ((options.id != null && ext.id === options.id) ||
-        (options.name != null && ext.name === options.name)) {
-        return ext
+      if (name === ext.id || name === ext.name) {
+        return key === '' ? ext : ext[key]
       }
     }
     return null
   }
 
-  // Attempts verify the signature on the passed certificate using this certificate's public key.
-  verify (child: Certificate): boolean {
+  checkSignature (child: Certificate): Error | null {
+    // RFC 5280, 4.2.1.9:
+    // "If the basic constraints extension is not present in a version 3
+    // certificate, or the extension is present but the cA boolean is not
+    // asserted, then the certified public key MUST NOT be used to verify
+    // certificate signatures."
+    // (not handler entrust broken SPKI, See http://www.entrust.net/knowledge-base/technote.cfm?tn=7869)
+    if (this.version === 3 && !this.basicConstraintsValid || (this.basicConstraintsValid && !this.isCA)) {
+        return new Error('The parent constraint violation error')
+    }
+
+    if (this.getExtension('keyUsage', 'keyCertSign') !== true) {
+      return new Error('The parent constraint violation error')
+    }
+
     if (!this.issued(child)) {
-      return false
+      return new Error('The parent certificate did not issue the given child certificate')
     }
 
-    const agl = getHashAgl(this.signatureOID)
+    const agl = getHashAgl(child.signatureOID)
     if (agl === '') {
-      return false
+      return new Error('Unknown child signature OID.')
     }
 
-    return this.publicKey.verify(child.tbsCertificate.toDER(), child.signature, agl)
+    const res = this.publicKey.verify(child.tbsCertificate.DER, child.signature, agl)
+    if (res === false) {
+      return new Error('Child signature not matched')
+    }
+    return null
   }
 
   // Returns true if this certificate's issuer matches the passed
@@ -561,19 +462,10 @@ export class Certificate {
     return child.isIssuer(this)
   }
 
-  // Generates the subjectKeyIdentifier for this certificate as byte buffer.
-  generateSubjectKeyIdentifier (hasher?: Hash) {
-    if (hasher == null) {
-      hasher = createHash('sha1')
-    }
-    return this.publicKey.getFingerprint(hasher, 'RSAPublicKey')
-  }
-
   // Verifies the subjectKeyIdentifier extension value for this certificate
-  // against its public key. If no extension is found, false will be
-  // returned.
+  // against its public key.
   verifySubjectKeyIdentifier () {
-    const ski = this.generateSubjectKeyIdentifier()
+    const ski = this.publicKey.getFingerprint(createHash('sha1'), 'PublicKey')
     return ski.toString('hex') === this.subjectKeyIdentifier
   }
 
@@ -662,6 +554,13 @@ function decodeExtKeyUsage (e: Extension) {
   let b2 = 0x00
   let b3 = 0x00
 
+  e.keyUsage = 0
+  for (let i = 0; i < 9; i++) {
+    if (ev.at(i) !== 0) {
+      e.keyUsage |= 1 << i
+    }
+  }
+
   if (ev.buf.length > 0) {
     b2 = ev.buf[0]
     b3 = ev.buf.length > 1 ? ev.buf[1] : 0
@@ -711,9 +610,7 @@ function decodeExtExtKeyUsage (e: Extension) {
   const ev = ASN1.fromDER(e.value)
   const vals = ev.mustCompound()
   for (const val of vals) {
-    const oid = ASN1.parseOID(val.bytes)
-    const name = getOIDName(oid)
-    e[name === '' ? oid : name] = true
+    e[getOIDName(ASN1.parseOID(val.bytes))] = true
   }
 }
 
@@ -887,18 +784,33 @@ function fillMissingFields (attrs: Attribute[]) {
   }
 }
 
+// Only support RSA and ECDSA
 function getHashAgl (oid: string): string {
   switch (getOIDName(oid)) {
-  case 'sha1WithRSAEncryption':
+  case 'sha1WithRsaEncryption':
     return 'sha1'
-  case 'md5WithRSAEncryption':
+  case 'md5WithRsaEncryption':
     return 'md5'
-  case 'sha256WithRSAEncryption':
+  case 'sha256WithRsaEncryption':
     return'sha256'
-  case 'sha384WithRSAEncryption':
+  case 'sha384WithRsaEncryption':
     return 'sha384'
-  case 'sha512WithRSAEncryption':
+  case 'sha512WithRsaEncryption':
     return 'sha512'
+  case 'RSASSA-PSS':
+    return'sha256'
+  case 'ecdsaWithSha1':
+    return'sha1'
+  case 'ecdsaWithSha256':
+    return'sha256'
+  case 'ecdsaWithSha384':
+    return'sha384'
+  case 'ecdsaWithSha512':
+    return'sha512'
+  case 'dsaWithSha1':
+    return'sha1'
+  case 'dsaWithSha256':
+    return'sha256'
   default:
     return ''
   }
@@ -928,52 +840,6 @@ function RDNAttributesAsArray (rdn: ASN1): Attribute[] {
   }
 
   return rval
-}
-
-function readSignatureParameters (oid: string, obj: ASN1, fillDefaults: boolean) {
-  const params = {} as any
-
-  if (oid !== getOID('RSASSA-PSS')) {
-    return params
-  }
-
-  if (fillDefaults) {
-    params.hash = { algorithmOID: getOID('sha1') }
-    params.mgf = {
-      algorithmOID: getOID('mgf1'),
-      hash: { algorithmOID: getOID('sha1') },
-    }
-    params.saltLength = 20
-  }
-
-  const capture: Captures = Object.create(null)
-  if (obj.validate(rsassaPssParameterValidator, capture) != null) {
-    throw new Error('Cannot read RSASSA-PSS parameter block.')
-  }
-
-  if (capture.hashOID != null) {
-    if (params.hash == null) {
-      params.hash = {}
-    }
-    params.hash.algorithmOID = ASN1.parseOID(capture.hashOID.bytes)
-  }
-
-  if (capture.maskGenOID != null) {
-    if (params.mgf == null) {
-      params.mgf = {}
-    }
-    params.mgf.algorithmOID = ASN1.parseOID(capture.maskGenOID.bytes)
-    if (params.mgf.hash == null) {
-      params.mgf.hash = {}
-    }
-    params.mgf.hash.algorithmOID = ASN1.parseOID(capture.maskGenHashOID.bytes)
-  }
-
-  if (capture.saltLength != null) {
-    params.saltLength = ASN1.parseInteger(capture.saltLength.bytes)
-  }
-
-  return params
 }
 
 function toJSONify (val: any): any {
