@@ -9,12 +9,9 @@ import { suite, it } from 'tman'
 import { PEM } from '../src/pem'
 import { ASN1, Class, Tag } from '../src/asn1'
 
-const crtData = fs.readFileSync('./test/cert/github.crt')
-
 suite('ASN1', function () {
-  const blocks = PEM.parse(crtData)
-
   it('should work', function () {
+    const blocks = PEM.parse(fs.readFileSync('./test/cert/github.crt'))
     const asn1 = ASN1.fromDER(blocks[0].body, true)
     strictEqual(asn1.class, Class.UNIVERSAL)
     strictEqual(asn1.tag, Tag.SEQUENCE)

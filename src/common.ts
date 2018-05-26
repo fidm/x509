@@ -41,7 +41,7 @@ export class BufferVisitor extends Visitor {
     return this.buf.length
   }
 
-  mustHas (steps: number, message: string = 'Too few bytes to parse.') {
+  mustHas (steps: number, message: string = 'Too few bytes to parse.'): this {
     const requested = this.end + steps
     if (requested > this.buf.length) {
       const error = new Error(message) as any
@@ -50,11 +50,13 @@ export class BufferVisitor extends Visitor {
       throw error
     }
     this.walk(0)
+    return this
   }
 
-  mustWalk (steps: number, message?: string) {
+  mustWalk (steps: number, message?: string): this {
     this.mustHas(steps, message)
     this.walk(steps)
+    return this
   }
 }
 
@@ -190,7 +192,12 @@ initOID('2.16.840.1.101.3.4.2.2', 'sha384')
 initOID('2.16.840.1.101.3.4.2.3', 'sha512')
 initOID('1.2.840.113549.2.5', 'md5')
 
-initOID('1.3.101.112', 'EdDSA25519')
+// Algorithm Identifiers for Ed25519, Ed448, X25519 and X448 for use in the Internet X.509 Public Key Infrastructure
+// https://tools.ietf.org/html/draft-ietf-curdle-pkix-10
+initOID('1.3.101.110', 'X25519')
+initOID('1.3.101.111', 'X448')
+initOID('1.3.101.112', 'Ed25519')
+initOID('1.3.101.113', 'Ed448')
 
 // pkcs#7 content types
 initOID('1.2.840.113549.1.7.1', 'data')

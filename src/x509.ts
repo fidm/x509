@@ -252,9 +252,9 @@ export class DistinguishedName {
   }
 }
 
-// Creates an empty X.509v3 RSA certificate.
+// Creates an empty X.509v3 certificate.
 export class Certificate {
-  // Converts an X.509 certificate from PEM format.
+  // Parse one or more X.509 certificate from PEM format buffer.
   static fromPEMs (data: Buffer): Certificate[] {
     const certs = []
     const pems = PEM.parse(data)
@@ -278,6 +278,7 @@ export class Certificate {
     return certs
   }
 
+  // Parse an X.509 certificate from PEM format buffer.
   static fromPEM (data: Buffer): Certificate {
     return Certificate.fromPEMs(data)[0]
   }
@@ -308,6 +309,8 @@ export class Certificate {
   readonly publicKey: PublicKey
   readonly publicKeyRaw: Buffer
   readonly tbsCertificate: ASN1
+
+  // Creates an X.509 certificate from an ASN.1 object
   constructor (obj: ASN1) {
     // validate certificate and capture data
     const captures: Captures = Object.create(null)
@@ -400,16 +403,8 @@ export class Certificate {
     this.tbsCertificate = captures.tbsCertificate
   }
 
-  toJSON () {
-    const obj = {} as any
-    for (const key of Object.keys(this)) {
-      obj[key] = toJSONify((this as any)[key])
-    }
-    delete obj.tbsCertificate
-    return obj
-  }
-
-  // Gets an extension by its name or id.
+  // Gets an extension by its name or oid.
+  // If extension exists and a key provided, it will return extension[key].
   getExtension (name: string, key: string = ''): any {
     for (const ext of this.extensions) {
       if (name === ext.id || name === ext.name) {
@@ -419,6 +414,8 @@ export class Certificate {
     return null
   }
 
+  // Returns null if a subject certificate is valid, or error if invalid.
+  // Note that it does not check validity time, DNS name, ip or others.
   checkSignature (child: Certificate): Error | null {
     // RFC 5280, 4.2.1.9:
     // "If the basic constraints extension is not present in a version 3
@@ -434,7 +431,7 @@ export class Certificate {
       return new Error('The parent constraint violation error')
     }
 
-    if (!this.issued(child)) {
+    if (!child.isIssuer(this)) {
       return new Error('The parent certificate did not issue the given child certificate')
     }
 
@@ -452,21 +449,24 @@ export class Certificate {
 
   // Returns true if this certificate's issuer matches the passed
   // certificate's subject. Note that no signature check is performed.
-  isIssuer (parent: Certificate) {
+  isIssuer (parent: Certificate): boolean {
     return this.issuer.getHash().equals(parent.subject.getHash())
-  }
-
-  // Returns true if this certificate's subject matches the issuer of the
-  // given certificate). Note that not signature check is performed.
-  issued (child: Certificate) {
-    return child.isIssuer(this)
   }
 
   // Verifies the subjectKeyIdentifier extension value for this certificate
   // against its public key.
-  verifySubjectKeyIdentifier () {
-    const ski = this.publicKey.getFingerprint(createHash('sha1'), 'PublicKey')
+  verifySubjectKeyIdentifier (): boolean {
+    const ski = this.publicKey.getFingerprint('sha1', 'PublicKey')
     return ski.toString('hex') === this.subjectKeyIdentifier
+  }
+
+  toJSON (): any {
+    const obj = {} as any
+    for (const key of Object.keys(this)) {
+      obj[key] = toJSONify((this as any)[key])
+    }
+    delete obj.tbsCertificate
+    return obj
   }
 
   [inspect.custom] (_depth: any, options: any): string {

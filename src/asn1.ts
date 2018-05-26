@@ -664,6 +664,14 @@ export class ASN1 {
     return ASN1._fromDER(new BufferVisitor(buf), deepParse)
   }
 
+  static parseDER (tagClass: Class, tag: Tag, buf: Buffer): ASN1 {
+    const obj = ASN1._fromDER(new BufferVisitor(buf), false)
+    if (obj.class !== tagClass && obj.tag !== tag) {
+      throw new Error(`invalid ASN.1 DER for class ${tagClass} and tag ${tag}`)
+    }
+    return obj
+  }
+
   static parseDERWithTemplate (buf: Buffer, tpl: Template): Captures {
     const obj = ASN1._fromDER(new BufferVisitor(buf), true)
     const captures: Captures = {}
@@ -730,7 +738,7 @@ export class ASN1 {
     this._der = null
   }
 
-  get value () {
+  get value (): any {
     if (this._value === undefined) {
       this._value = this.valueOf()
     }
@@ -831,24 +839,16 @@ export class ASN1 {
     }
   }
 
-  /**
-   * Validates that the given ASN.1 object is at least a super set of the
-   * given ASN.1 structure. Only tag classes and types are checked. An
-   * optional map may also be provided to capture ASN.1 values while the
-   * structure is checked.
-   *
-   * To capture an ASN.1 value, set an object in the validator's 'capture'
-   * parameter to the key to use in the capture map. To capture the full
-   * ASN.1 object, specify 'captureASN1'.
-   *
-   * Objects in the validator may set a field 'optional' to true to indicate
-   * that it isn't necessary to pass validation.
-   *
-   * @param tpl the ASN.1 structure Template.
-   * @param capture an optional map to capture values in.
-   *
-   * @return null on success, Error on failure.
-   */
+  // Validates that the given ASN.1 object is at least a super set of the
+  // given ASN.1 structure. Only tag classes and types are checked. An
+  // optional map may also be provided to capture ASN.1 values while the
+  // structure is checked.
+  //
+  // To capture an ASN.1 object, set an object in the validator's 'capture'
+  // parameter to the key to use in the capture map.
+  //
+  // Objects in the validator may set a field 'optional' to true to indicate
+  // that it isn't necessary to pass validation.
   validate (tpl: Template, captures: Captures = {}): Error | null {
     if (this.class !== tpl.class) {
       return new Error(`ASN.1 object validate failure for ${tpl.name} : error class ${Class[this.class]}`)
@@ -885,14 +885,14 @@ export class ASN1 {
     return null
   }
 
-  toJSON () {
+  toJSON (): any {
     let value = this.value
     if (Array.isArray(value)) {
       value = value.map((val) => val.toJSON())
     }
     return {
       class: Class[this.class],
-      tag: Tag[this.tag],
+      tag: this.class === Class.UNIVERSAL ? Tag[this.tag] : this.tag,
       value,
     }
   }

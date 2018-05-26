@@ -4,19 +4,10 @@
 // **License:** MIT
 
 import fs from 'fs'
-import { strictEqual, ok } from 'assert'
+import { strictEqual, ok, throws } from 'assert'
 import { suite, it } from 'tman'
-import { sign as ed25519 } from 'tweetnacl'
 import { Certificate } from '../src/x509'
 import { PublicKey, PrivateKey, RSAPrivateKey } from '../src/pki'
-
-PublicKey.addVerifier('1.3.101.112', function (this: PublicKey, data: Buffer, signature: Buffer): boolean {
-  return ed25519.detached.verify(data, signature, this.raw)
-})
-
-PrivateKey.addSigner('1.3.101.112', function (this: PrivateKey, data: Buffer): Buffer {
-  return Buffer.from(ed25519.detached(data, this.raw))
-})
 
 suite('PKI', function () {
   it('should work', function () {
@@ -41,27 +32,52 @@ suite('PKI', function () {
     ok(cert.publicKey.verify(data, Buffer.from(signature, 'hex'), 'sha256'))
   })
 
-  it.skip('should support ed25519', function () {
+  it('should support ed25519', function () {
+    const publicKey = PublicKey.fromPEM(fs.readFileSync('./test/cert/ed25519-key-public.pem'))
+    const privateKey = PrivateKey.fromPEM(fs.readFileSync('./test/cert/ed25519-key-simple.pem'))
+    const fullPrivateKey = PrivateKey.fromPEM(fs.readFileSync('./test/cert/ed25519-key-full.pem'))
+
+    strictEqual(publicKey.algo, 'Ed25519')
+    strictEqual(privateKey.algo, 'Ed25519')
+    strictEqual(fullPrivateKey.algo, 'Ed25519')
+    strictEqual(publicKey.keyRaw.length, 32)
+    strictEqual(privateKey.keyRaw.length, 32)
+    strictEqual(fullPrivateKey.keyRaw.length, 64)
+
+    const data = Buffer.allocUnsafe(100)
+    const signature = fullPrivateKey.sign(data, 'sha256')
+    ok(publicKey.verify(data, signature, 'sha256'))
+
+    throws(() => privateKey.sign(data, 'sha256'))
+    privateKey.setPublicKey(publicKey)
+    strictEqual(privateKey.keyRaw.length, 64)
+    ok(publicKey.verify(data, privateKey.sign(data, 'sha512'), 'sha512'))
+  })
+
+  it('should support ed25519 certificate', function () {
     const cert = Certificate.fromPEM(fs.readFileSync('./test/cert/ed25519-server-cert.pem'))
     const privateKey = PrivateKey.fromPEM(fs.readFileSync('./test/cert/ed25519-server-key.pem'))
 
-    strictEqual(cert.publicKey.raw.length, 32)
-    strictEqual(privateKey.raw.length, 64) // 34 bytes?
-    strictEqual(privateKey.algo, 'EdDSA25519')
+    privateKey.setPublicKey(cert.publicKey)
+    strictEqual(cert.publicKey.keyRaw.length, 32)
+    strictEqual(privateKey.keyRaw.length, 64)
+    strictEqual(privateKey.algo, 'Ed25519')
 
     const data = Buffer.allocUnsafe(100)
     const signature = privateKey.sign(data, 'sha256')
     ok(cert.publicKey.verify(data, signature, 'sha256'))
 
-    const clicert = Certificate.fromPEM(fs.readFileSync('./test/cert/ed25519-client-cert.pem'))
-    const cliprivateKey = PrivateKey.fromPEM(fs.readFileSync('./test/cert/ed25519-client-key.pem'))
+    const certcli = Certificate.fromPEM(fs.readFileSync('./test/cert/ed25519-client-cert.pem'))
+    const privateKeycli = PrivateKey.fromPEM(fs.readFileSync('./test/cert/ed25519-client-key.pem'))
 
-    strictEqual(clicert.publicKey.raw.length, 32)
-    strictEqual(cliprivateKey.raw.length, 64)
-    strictEqual(cliprivateKey.algo, 'EdDSA25519')
+    privateKeycli.setPublicKey(certcli.publicKey)
+    privateKeycli.setPublicKey(certcli.publicKey)
+    strictEqual(certcli.publicKey.keyRaw.length, 32)
+    strictEqual(privateKeycli.keyRaw.length, 64)
+    strictEqual(privateKeycli.algo, 'Ed25519')
 
-    const data2 = Buffer.allocUnsafe(99)
-    const signature2 = cliprivateKey.sign(data2, 'sha512')
-    ok(clicert.publicKey.verify(data2, signature2, 'sha512'))
+    const signaturecli = privateKeycli.sign(data, 'sha512')
+    ok(certcli.publicKey.verify(data, signaturecli, 'sha512'))
+    ok(cert.publicKey.verify(data, signaturecli, 'sha512') === false)
   })
 })

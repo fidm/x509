@@ -4,7 +4,8 @@
 // **License:** MIT
 
 import { inspect } from 'util'
-import { Hash, createVerify, createSign, createHash } from 'crypto'
+import { createVerify, createSign, createHash } from 'crypto'
+import { sign as ed25519 } from 'tweetnacl'
 import { PEM } from './pem'
 import { getOID, getOIDName } from './common'
 import { ASN1, Class, Tag, Template, Captures } from './asn1'
@@ -145,9 +146,17 @@ const rsaPrivateKeyValidator: Template = {
   }],
 }
 
+const EdDSAPrivateKeyOIDs = [
+  // https://tools.ietf.org/html/draft-ietf-curdle-pkix-10
+  getOID('X25519'),
+  getOID('X448'),
+  getOID('Ed25519'),
+  getOID('Ed448'),
+]
+
 export type Verifier = (this: PublicKey, data: Buffer, signature: Buffer) => boolean
 export class PublicKey {
-  // parse public key from PKCS#8 PEM format or PKCS#1 RSA PEM
+  // Parse an PublicKey for X.509 certificate from PKCS#8 PEM format buffer or PKCS#1 RSA PEM format buffer.
   static fromPEM (pem: Buffer): PublicKey {
     const msg = PEM.parse(pem)[0]
     if (msg.procType.includes('ENCRYPTED')) {
@@ -176,7 +185,12 @@ export class PublicKey {
     }
   }
 
+  // Registers an external Verifier with object identifier.
+  // Built-in verifiers: Ed25519, RSA, others see https://nodejs.org/api/crypto.html#crypto_class_verify
   static addVerifier (oid: string, fn: Verifier) {
+    if (getOID(oid) === '') {
+      throw new Error(`Invalid object identifier: ${oid}`)
+    }
     if (PublicKey._verifiers[oid] != null) {
       throw new Error(`Verifier ${oid} exists`)
     }
@@ -188,6 +202,8 @@ export class PublicKey {
   readonly algo: string
   protected _pkcs8: ASN1
   protected _keyRaw: Buffer
+  protected _finalKey: Buffer
+  protected _finalPEM: string
   constructor (obj: ASN1) {
     const captures: Captures = Object.create(null)
     const err = obj.validate(publicKeyValidator, captures)
@@ -199,12 +215,15 @@ export class PublicKey {
     this.algo = getOIDName(this.oid)
     this._pkcs8 = obj
     this._keyRaw = ASN1.parseBitString(captures.publicKey.bytes).buf
+    this._finalKey = this._keyRaw
+    this._finalPEM = ''
   }
 
-  get raw (): Buffer {
-    return this._keyRaw
+  get keyRaw (): Buffer {
+    return this._finalKey
   }
 
+  // Returns true if the provided data and the given signature matched.
   verify (data: Buffer, signature: Buffer, hashAlgorithm: string): boolean {
     const verifier = PublicKey._verifiers[this.oid]
     if (verifier != null) {
@@ -217,7 +236,8 @@ export class PublicKey {
     return verify.verify(this.toPEM(), signature)
   }
 
-  getFingerprint (hasher: Hash, type: string = 'PublicKey'): Buffer {
+  // Returns the digest of the PublicKey with given hash algorithm.
+  getFingerprint (hashAlgorithm: string, type: string = 'PublicKey'): Buffer {
     let bytes
     switch (type) {
     case 'PublicKeyInfo':
@@ -230,16 +250,9 @@ export class PublicKey {
       throw new Error(`Unknown fingerprint type "${type}".`)
     }
 
+    const hasher = createHash(hashAlgorithm)
     hasher.update(bytes)
     return hasher.digest()
-  }
-
-  toJSON (): any {
-    return {
-      oid: this.oid,
-      algo: this.algo,
-      publicKey: this._keyRaw,
-    }
   }
 
   toASN1 (): ASN1 {
@@ -251,7 +264,18 @@ export class PublicKey {
   }
 
   toPEM (): string {
-    return new PEM('PUBLIC KEY', this._pkcs8.DER).toString()
+    if (this._finalPEM === '') {
+      this._finalPEM = new PEM('PUBLIC KEY', this._pkcs8.DER).toString()
+    }
+    return this._finalPEM
+  }
+
+  toJSON (): any {
+    return {
+      oid: this.oid,
+      algo: this.algo,
+      publicKey: this._keyRaw,
+    }
   }
 
   [inspect.custom] (_depth: any, options: any): string {
@@ -261,7 +285,7 @@ export class PublicKey {
 
 export type Signer = (this: PrivateKey, data: Buffer) => Buffer
 export class PrivateKey {
-  // parse private key from PKCS#8 PEM format or PKCS#1 RSA PEM
+  // Parse an PrivateKey for X.509 certificate from PKCS#8 PEM format buffer or PKCS#1 RSA PEM format buffer.
   static fromPEM (pem: Buffer): PrivateKey {
     const msg = PEM.parse(pem)[0]
 
@@ -293,7 +317,12 @@ export class PrivateKey {
     }
   }
 
+  // Registers an external Signer with object identifier.
+  // Built-in verifiers: Ed25519, RSA, others see https://nodejs.org/api/crypto.html#crypto_class_sign
   static addSigner (oid: string, fn: Signer) {
+    if (getOID(oid) === '') {
+      throw new Error(`Invalid object identifier: ${oid}`)
+    }
     if (PrivateKey._signers[oid] != null) {
       throw new Error(`Signer ${oid} exists`)
     }
@@ -306,6 +335,9 @@ export class PrivateKey {
   readonly algo: string
   protected _pkcs8: ASN1
   protected _keyRaw: Buffer
+  protected _publicKeyRaw: Buffer | null
+  protected _finalKey: Buffer
+  protected _finalPEM: string
   constructor (obj: ASN1) {
     // get RSA params
     const captures: Captures = Object.create(null)
@@ -319,12 +351,48 @@ export class PrivateKey {
     this.algo = getOIDName(this.oid)
     this._pkcs8 = obj
     this._keyRaw = captures.privateKey.bytes
+    this._publicKeyRaw = null
+    this._finalKey = this._keyRaw
+    this._finalPEM = ''
+
+    if (EdDSAPrivateKeyOIDs.includes(this.oid)) {
+      this._finalKey = this._keyRaw = ASN1.parseDER(Class.UNIVERSAL, Tag.OCTETSTRING, this._keyRaw).bytes
+      if (this.version === 1) {
+        for (const val of obj.mustCompound()) {
+          if (val.class === Class.CONTEXT_SPECIFIC && val.tag === 1) {
+            this._publicKeyRaw = ASN1.parseBitString(val.bytes).buf
+            this._finalKey = Buffer.concat([this._keyRaw, this._publicKeyRaw])
+          }
+        }
+      }
+    }
   }
 
-  get raw (): Buffer {
-    return this._keyRaw
+  get keyRaw (): Buffer {
+    return this._finalKey
   }
 
+  // Returns publicKey buffer, it is used for Ed25519/Ed448.
+  get publicKeyRaw (): Buffer {
+    if (this._publicKeyRaw == null) {
+      throw new Error('Public key not exists')
+    }
+    return this._publicKeyRaw
+  }
+
+  // Sets an PublicKey into PrivateKey.
+  // It is used for Ed25519/Ed448. If oid not matched, an error will be thrown.
+  setPublicKey (key: PublicKey) {
+    if (this.oid !== key.oid) {
+      throw new Error('invalid PublicKey, OID not equal')
+    }
+    this._publicKeyRaw = key.keyRaw
+    if (EdDSAPrivateKeyOIDs.includes(this.oid)) {
+      this._finalKey = Buffer.concat([this._keyRaw, this._publicKeyRaw])
+    }
+  }
+
+  // Returns signature for the given data and hash algorithm.
   sign (data: Buffer, hashAlgorithm: string): Buffer {
     const signer = PrivateKey._signers[this.oid]
     if (signer != null) {
@@ -337,15 +405,6 @@ export class PrivateKey {
     return sign.sign(this.toPEM())
   }
 
-  toJSON (): any {
-    return {
-      version: this.version,
-      oid: this.oid,
-      algo: this.algo,
-      privateKey: this._keyRaw,
-    }
-  }
-
   toASN1 (): ASN1 {
     return this._pkcs8
   }
@@ -355,7 +414,20 @@ export class PrivateKey {
   }
 
   toPEM (): string {
-    return new PEM('PRIVATE KEY', this._pkcs8.DER).toString()
+    if (this._finalPEM === '') {
+      this._finalPEM = new PEM('PRIVATE KEY', this._pkcs8.DER).toString()
+    }
+    return this._finalPEM
+  }
+
+  toJSON (): any {
+    return {
+      version: this.version,
+      oid: this.oid,
+      algo: this.algo,
+      privateKey: this._keyRaw,
+      publicKey: this._publicKeyRaw,
+    }
   }
 
   [inspect.custom] (_depth: any, options: any): string {
@@ -401,8 +473,15 @@ export class RSAPublicKey extends PublicKey {
     return this._pkcs1
   }
 
+  toDER (): Buffer {
+    return this._keyRaw
+  }
+
   toPEM (): string {
-    return new PEM('RSA PUBLIC KEY', this._keyRaw).toString()
+    if (this._finalPEM === '') {
+      this._finalPEM = new PEM('RSA PUBLIC KEY', this._keyRaw).toString()
+    }
+    return this._finalPEM
   }
 
   toPublicKeyPEM (): string {
@@ -476,7 +555,10 @@ export class RSAPrivateKey extends PrivateKey {
   }
 
   toPEM (): string {
-    return new PEM('RSA PRIVATE KEY', this._keyRaw).toString()
+    if (this._finalPEM === '') {
+      this._finalPEM = new PEM('RSA PRIVATE KEY', this._keyRaw).toString()
+    }
+    return this._finalPEM
   }
 
   toPrivateKeyPEM (): string {
@@ -493,3 +575,15 @@ export class RSAPrivateKey extends PrivateKey {
 function trimLeadingZeroByte (hex: string): string {
   return (hex.length % 8 !== 0) && hex.startsWith('00') ? hex.slice(2) : hex
 }
+
+PublicKey.addVerifier(getOID('Ed25519'), function (this: PublicKey, data: Buffer, signature: Buffer): boolean {
+  return ed25519.detached.verify(data, signature, this.keyRaw)
+})
+
+PrivateKey.addSigner(getOID('Ed25519'), function (this: PrivateKey, data: Buffer): Buffer {
+  const key = this.keyRaw
+  if (key.length !== 64) {
+    throw new Error('Invalid signing key, should setPublicKeyRaw before sign.')
+  }
+  return Buffer.from(ed25519.detached(data, key))
+})

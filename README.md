@@ -14,8 +14,7 @@ Pure JavaScript X509 certificate tools for Node.js, includes PEM, ASN1 with DER.
 const fs = require('fs')
 const { Certificate } = require('@fidm/x509')
 
-const crtData = fs.readFileSync('./test/cert/github.crt')
-const cert = Certificate.fromPEM(crtData)
+const cert = Certificate.fromPEM(fs.readFileSync('./test/cert/github.crt'))
 console.log(cert)
 // <Certificate { version: 2,
 //   serialNumber: '0a0630427f5bbced6957396593b6451f',
@@ -191,13 +190,530 @@ console.log(cert)
 
 ## API
 
-### Class: PEM
+### Class: Certificate
+
+```js
+const { Certificate } = require('@fidm/x509')
+```
+
+#### Certificate.fromPEMs(data: Buffer) => Certificate[]
+Parse one or more X.509 certificate from PEM format buffer.
+
+#### Certificate.fromPEM(data: Buffer) => Certificate
+Parse an X.509 certificate from PEM format buffer.
+
+#### new Certificate(obj: ASN1)
+Creates an X.509 certificate from an ASN.1 object.
+
+#### certificate.version: number
+
+#### certificate.serialNumber: string
+
+#### certificate.signatureOID: string
+
+#### certificate.signatureAlgorithm: string
+
+#### certificate.infoSignatureOID: string
+
+#### certificate.signature: Buffer
+
+#### certificate.subjectKeyIdentifier: string
+
+#### certificate.authorityKeyIdentifier: string
+
+#### certificate.ocspServer: string
+
+#### certificate.issuingCertificateURL: string
+
+#### certificate.isCA: boolean
+
+#### certificate.maxPathLen: number
+
+#### certificate.basicConstraintsValid: boolean
+
+#### certificate.keyUsage: number
+
+#### certificate.dnsNames: string[]
+
+#### certificate.emailAddresses: string[]
+
+#### certificate.ipAddresses: string[]
+
+#### certificate.uris: string[]
+
+#### certificate.validFrom: Date
+
+#### certificate.validTo: Date
+
+#### certificate.issuer: DistinguishedName
+
+#### certificate.subject: DistinguishedName
+
+#### certificate.extensions: Extension[]
+
+#### certificate.publicKey: PublicKey
+
+#### certificate.publicKeyRaw: Buffer
+
+#### certificate.tbsCertificate: ASN1
+
+#### certificate.getExtension(name: string, key: string = '') => any
+Gets an extension by its name or oid. If extension exists and a key provided, it will return extension[key].
+
+```js
+certificate.getExtension('keyUsage')
+certificate.getExtension('2.5.29.15')
+// => { id: '2.5.29.15',
+//      critical: true,
+//      value: <Buffer 03 02 05 a0>,
+//      name: 'keyUsage',
+//      digitalSignature: true,
+//      nonRepudiation: false,
+//      keyEncipherment: true,
+//      dataEncipherment: false,
+//      keyAgreement: false,
+//      keyCertSign: false,
+//      cRLSign: false,
+//      encipherOnly: false,
+//      decipherOnly: false }
+certificate.getExtension('keyUsage', 'keyCertSign') // => false
+```
+
+#### certificate.checkSignature(child: Certificate) => Error | null
+Returns null if a subject certificate is valid, or error if invalid.
+Note that it does not check validity time, DNS name, ip or others.
+
+```js
+someRootCA.checkSignature(someCert) // => null or error
+```
+
+#### certificate.isIssuer(parent: Certificate) => boolean
+Returns true if this certificate's issuer matches the passed certificate's subject. Note that no signature check is performed.
+
+#### certificate.verifySubjectKeyIdentifier() => boolean
+Verifies the subjectKeyIdentifier extension value for this certificate against it's public key.
+
+#### certificate.toJSON() => any
+
+### Class: DistinguishedName
+
+```js
+const { DistinguishedName } = require('@fidm/x509')
+```
+
+#### distinguishedName.commonName: string
+
+#### distinguishedName.organizationName: string
+
+#### distinguishedName.organizationalUnitName: string
+
+#### distinguishedName.countryName: string
+
+#### distinguishedName.localityName: string
+
+#### distinguishedName.serialName: string
+
+#### distinguishedName.getHash() => Buffer
+
+#### distinguishedName.getField(key: string) => Attribute | null
+
+#### distinguishedName.toJSON() => any
+
+### Class: PublicKey
+
+```js
+const { PublicKey } = require('@fidm/x509')
+```
+
+#### PublicKey.fromPEM(pem: Buffer) => PublicKey
+Parse an PublicKey for X.509 certificate from PKCS#8 PEM format buffer or PKCS#1 RSA PEM format buffer.
+
+#### PublicKey.addVerifier(oid: string, fn: Verifier)
+Registers an external Verifier with object identifier.
+Built-in verifiers: Ed25519, RSA, others see https://nodejs.org/api/crypto.html#crypto_class_verify
+
+```js
+PublicKey.addVerifier(getOID('Ed25519'), function (this: PublicKey, data: Buffer, signature: Buffer): boolean {
+  return ed25519.detached.verify(data, signature, this.keyRaw)
+})
+```
+
+#### new PublicKey(obj: ASN1)
+
+#### publicKey.oid: string
+
+#### publicKey.algo: string
+
+#### publicKey.keyRaw: Buffer
+
+#### publicKey.verify(data: Buffer, signature: Buffer, hashAlgorithm: string) => boolean
+Returns true if the provided data and the given signature matched.
+
+```js
+certificate.publicKey.verify(data, signature, 'sha256') // => true or false
+```
+
+#### publicKey.getFingerprint(hashAlgorithm: string, type: string = 'PublicKey') => Buffer
+Returns the digest of the public key with given hash algorithm. `type` should be `'PublicKey'` (for PKCS#1) or `'PublicKeyInfo'` (for PKCS#1).
+
+```js
+certificate.publicKey.getFingerprint('sha1', 'PublicKey') // => Buffer
+```
+
+#### publicKey.toASN1() => ASN1
+
+#### publicKey.toDER() => Buffer
+
+#### publicKey.toPEM() => string
+
+#### publicKey.toJSON() => any
+
+### Class: PrivateKey
+
+```js
+const { PrivateKey } = require('@fidm/x509')
+```
+
+#### PrivateKey.fromPEM(pem: Buffer) => PrivateKey
+Parse an PrivateKey for X.509 certificate from PKCS#8 PEM format buffer or PKCS#1 RSA PEM format buffer.
+
+#### PrivateKey.addSigner (oid: string, fn: Signer)
+Registers an external Signer with object identifier.
+Built-in signers: Ed25519, RSA, others see https://nodejs.org/api/crypto.html#crypto_class_sign
+
+```js
+PrivateKey.addSigner(getOID('Ed25519'), function (this: PrivateKey, data: Buffer): Buffer {
+  const key = this.keyRaw
+  if (key.length !== 64) {
+    throw new Error('Invalid signing key, should setPublicKeyRaw before sign.')
+  }
+  return Buffer.from(ed25519.detached(data, key))
+})
+```
+
+#### new PrivateKey(obj: ASN1)
+
+#### privateKey.version: number
+
+#### privateKey.oid: string
+
+#### privateKey.algo: string
+
+#### privateKey.keyRaw: Buffer
+
+#### privateKey.publicKeyRaw: Buffer
+Returns publicKey buffer, it is used for Ed25519/Ed448. If publicKeyRaw not exists, an error will be thrown.
+
+#### privateKey.setPublicKey(key: PublicKey)
+Sets an PublicKey into PrivateKey. It is used for Ed25519/Ed448. If oid not matched, an error will be thrown.
+
+```js
+const cert = Certificate.fromPEM(fs.readFileSync('./test/cert/ed25519-server-cert.pem'))
+const privateKey = PrivateKey.fromPEM(fs.readFileSync('./test/cert/ed25519-server-key.pem'))
+
+privateKey.setPublicKey(cert.publicKey)
+const signature = privateKey.sign(data, 'sha256')
+cert.publicKey.verify(data, signature, 'sha256') // => true
+```
+
+#### privateKey.sign(data: Buffer, hashAlgorithm: string) => Buffer
+Returns signature for the given data and hash algorithm.
+
+#### privateKey.toASN1() => ASN1
+
+#### privateKey.toDER() => Buffer
+
+#### privateKey.toPEM() => string
+
+#### privateKey.toJSON() => any
+
+### Class: RSAPublicKey extends PublicKey
+
+```js
+const { RSAPublicKey } = require('@fidm/x509')
+```
+
+#### RSAPublicKey.fromPublicKey(publicKey: PublicKey) => RSAPublicKey
+
+#### rsaPublicKey.exponent: number
+
+#### rsaPublicKey.modulus: string
+
+#### rsaPublicKey.toPublicKeyPEM (): string
+
+### Class: RSAPrivateKey extends PrivateKey
+
+```js
+const { RSAPrivateKey } = require('@fidm/x509')
+```
+
+#### RSAPrivateKey.fromPrivateKey(privateKey: PrivateKey): RSAPrivateKey
+
+#### rsaPublicKey.publicExponent: number
+
+#### rsaPrivateKey.privateExponent: string
+
+#### rsaPrivateKey.modulus: string
+
+#### rsaPrivateKey.prime1: string
+
+#### rsaPrivateKey.prime2: string
+
+#### rsaPrivateKey.exponent1: string
+
+#### rsaPrivateKey.exponent2: string
+
+#### rsaPrivateKey.coefficient: string
+
+#### rsaPrivateKey.toPrivateKeyPEM (): string
 
 ### Class: ASN1
 
-### Class: RSAPublicKey
+Implements parsing of DER-encoded ASN.1 data structures, as defined in ITU-T Rec X.690.
 
-### Class: Certificate
+```js
+const { ASN1 } = require('@fidm/x509')
+```
+
+Construct PKCS#8 private key ASN1 object from PKCS#1 private key ASN1 object:
+```ts
+const privateKeyASN1 = ASN1.Seq([
+  // Version (INTEGER)
+  rsaPrivateKeyASN1.value[0],
+  // AlgorithmIdentifier
+  ASN1.Seq([
+    // algorithm
+    ASN1.OID(getOID('rsaEncryption')),
+    // optional parameters
+    ASN1.Null(),
+  ]),
+  // PrivateKey
+  new ASN1(Class.UNIVERSAL, Tag.OCTETSTRING, rsaPrivateKeyASN1.DER),
+])
+```
+
+#### ASN1.Bool(val: boolean) => ASN1
+
+#### ASN1.parseBool(buf: Buffer) => boolean
+
+#### ASN1.Integer(num: number | Buffer) => ASN1
+
+#### ASN1.parseInteger(buf: Buffer) => number | string
+
+#### ASN1.parseIntegerNum(buf: Buffer) => number
+
+#### ASN1.parseIntegerStr(buf: Buffer) => string
+
+#### ASN1.BitString(bs: BitString | Buffer) => ASN1
+
+#### ASN1.parseBitString(buf: Buffer) => BitString
+
+#### ASN1.Null() => ASN1
+
+#### ASN1.parseNull(buf: Buffer) => null
+
+#### ASN1.OID(oid: string) => ASN1
+
+#### ASN1.parseOID(buf: Buffer) => string
+
+#### ASN1.UTF8(str: string) => ASN1
+
+#### ASN1.parseUTF8(buf: Buffer) => string
+
+#### ASN1.NumericString(str: string) => ASN1
+
+#### ASN1.parseNumericString(buf: Buffer) => string
+
+#### ASN1.PrintableString(str: string) => ASN1
+
+#### ASN1.parsePrintableString(buf: Buffer) => string
+
+#### ASN1.IA5String(str: string) => ASN1
+
+#### ASN1.parseIA5String(buf: Buffer) => string
+
+#### ASN1.T61String(str: string) => ASN1
+
+#### ASN1.parseT61String(buf: Buffer) => string
+
+#### ASN1.GeneralString(str: string) => ASN1
+
+#### ASN1.parseGeneralString(buf: Buffer) => string
+
+#### ASN1.UTCTime(date: Date) => ASN1
+
+#### ASN1.parseUTCTime(buf: Buffer) => Date
+
+#### ASN1.GeneralizedTime(date: Date) => ASN1
+
+#### ASN1.parseGeneralizedTime(buf: Buffer) => Date
+
+#### ASN1.parseTime(tag: Tag, buf: Buffer) => Date
+
+#### ASN1.Set(objs: ASN1[]) => ASN1
+
+#### ASN1.Seq(objs: ASN1[]) => ASN1
+
+#### ASN1.Spec(tag: Tag, objs: ASN1 | ASN1[], isCompound: boolean = true) => ASN1
+
+#### ASN1.fromDER(buf: Buffer, deepParse: boolean = false) => ASN1
+
+#### ASN1.parseDER(tagClass: Class, tag: Tag, buf: Buffer) => ASN1
+
+#### ASN1.parseDERWithTemplate(buf: Buffer, tpl: Template) => Captures
+
+#### new ASN1(tagClass: Class, tag: Tag, data: Buffer, isCompound: boolean = false)
+
+#### asn1.class: Class
+
+#### asn1.tag: Tag
+
+#### asn1.bytes: Buffer
+
+#### asn1.isCompound: boolean
+
+#### asn1.value: any
+
+#### asn1.DER: Buffer
+
+#### asn1.mustCompound(msg: string = 'asn1 object value is not compound') => ASN1[]
+
+#### asn1.equals(obj: ASN1) => boolean
+
+#### asn1.toDER() => Buffer
+
+#### asn1.validate(tpl: Template, captures: Captures = {}) => Error | null
+Validates that the given ASN.1 object is at least a super set of the
+given ASN.1 structure. Only tag classes and types are checked. An
+optional map may also be provided to capture ASN.1 values while the
+structure is checked.
+
+To capture an ASN.1 object, set an object in the validator's 'capture'
+parameter to the key to use in the capture map.
+
+Objects in the validator may set a field 'optional' to true to indicate
+that it isn't necessary to pass validation.
+
+```ts
+const publicKeyValidator: Template = {
+  name: 'PublicKeyInfo',
+  class: Class.UNIVERSAL,
+  tag: Tag.SEQUENCE,
+  capture: 'publicKeyInfo',
+  value: [{
+    name: 'PublicKeyInfo.AlgorithmIdentifier',
+    class: Class.UNIVERSAL,
+    tag: Tag.SEQUENCE,
+    value: [{
+      name: 'PublicKeyAlgorithmIdentifier.algorithm',
+      class: Class.UNIVERSAL,
+      tag: Tag.OID,
+      capture: 'publicKeyOID',
+    }],
+  }, {
+    name: 'PublicKeyInfo.PublicKey',
+    class: Class.UNIVERSAL,
+    tag: Tag.BITSTRING,
+    capture: 'publicKey',
+  }],
+}
+
+const captures: Captures = Object.create(null)
+const err = asn1.validate(publicKeyValidator, captures)
+if (err != null) {
+  throw new Error('Cannot read X.509 public key: ' + err.message)
+}
+const oid = ASN1.parseOID(captures.publicKeyOID.bytes)
+```
+
+#### asn1.valueOf() => any
+
+#### asn1.toJSON() => any
+
+### Class: BitString
+
+```js
+const { BitString } = require('@fidm/x509')
+```
+
+#### new BitString(buf: Buffer, bitLen: number)
+
+#### bitString.buf: Buffer
+
+#### bitString.bitLen: number
+
+#### bitString.at(i: number) => number
+
+#### bitString.rightAlign() => Buffer
+
+### Class: PEM
+
+```js
+const { PEM } = require('@fidm/x509')
+```
+
+#### PEM.parse(data: Buffer) => PEM[]
+Parse PEM formatted blocks form buffer, returns one or more blocks.
+
+#### pem.type: string
+
+#### pem.body: Buffer
+
+#### pem.procType: string
+
+#### pem.getHeader(key: string) => string
+
+#### pem.setHeader(key: string, val: string)
+
+#### pem.toString() => string
+
+#### pem.toJSON() => any
+
+### Class: Visitor
+
+```js
+const { Visitor } = require('@fidm/x509')
+```
+
+#### new Visitor(start: number = 0, end: number = 0)
+
+#### visitor.start: number
+
+#### visitor.end: number
+
+#### visitor.reset(start: number = 0, end: number = 0) => this
+
+#### visitor.walk(steps: number) => this
+
+### Class: BufferVisitor extends Visitor
+
+```js
+const { BufferVisitor } = require('@fidm/x509')
+```
+
+#### new BufferVisitor(buf: Buffer, start: number = 0, end: number = 0)
+
+#### bufferVisitor.buf: Buffer
+
+#### bufferVisitor.length: number
+
+#### bufferVisitor.mustHas(steps: number, message: string = 'Too few bytes to parse.') => this
+
+#### bufferVisitor.mustWalk(steps: number, message?: string) => this
+
+### Others
+
+```js
+const { bytesFromIP, bytesToIP, getOID, getOIDName } = require('@fidm/x509')
+```
+
+#### function bytesFromIP (ip: string) => Buffer | null
+
+#### function bytesToIP (bytes: Buffer) => string
+
+#### function getOID (nameOrId: string) => string
+
+#### function getOIDName (nameOrId: string) => string
 
 [npm-url]: https://www.npmjs.com/package/@fidm/x509
 [npm-image]: https://img.shields.io/npm/v/@fidm/x509.svg

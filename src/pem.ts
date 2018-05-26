@@ -68,7 +68,6 @@ export class PEM {
     this.headers[key] = val
   }
 
-  // Encode writes the PEM encoding of b to out.
   toString (): string {
     let rVal = pemStart + this.type + pemEndOfLine + '\n'
     const headers = Object.keys(this.headers)
@@ -103,7 +102,7 @@ export class PEM {
     return this.body
   }
 
-  toJSON () {
+  toJSON (): any {
     return {
       type: this.type,
       body: this.body,

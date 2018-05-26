@@ -79,20 +79,18 @@ suite('X509', function () {
 
   it('should support ed25519 certificate', function () {
     const cert = Certificate.fromPEM(fs.readFileSync('./test/cert/ed25519-server-cert.pem'))
-    // const privateKey = PrivateKey.fromPEM(fs.readFileSync('./test/cert/ed25519-server-key.pem'))
+    const privateKey = PrivateKey.fromPEM(fs.readFileSync('./test/cert/ed25519-server-key.pem'))
 
     ok(cert.verifySubjectKeyIdentifier())
     strictEqual(cert.issuer.commonName, 'Root CA')
     strictEqual(cert.subject.commonName, 'Ed25519')
 
-    // Node.js can't support ed25519
-    // const data = Buffer.allocUnsafe(100)
-    // const signature = privateKey.sign(data, 'sha256')
-    // ok(cert.publicKey.verify(data, signature, 'sha256'))
+    privateKey.setPublicKey(cert.publicKey)
+    const data = Buffer.allocUnsafe(100)
+    const signature = privateKey.sign(data, 'sha256')
+    ok(cert.publicKey.verify(data, signature, 'sha256'))
 
     const clicert = Certificate.fromPEM(fs.readFileSync('./test/cert/ed25519-client-cert.pem'))
-    // const cliprivateKey = PrivateKey.fromPEM(fs.readFileSync('./test/cert/ed25519-client-key.pem'))
-
     ok(clicert.verifySubjectKeyIdentifier())
     strictEqual(clicert.issuer.commonName, 'CA')
     strictEqual(clicert.subject.commonName, 'Client-Ed25519')
@@ -120,7 +118,6 @@ suite('X509', function () {
     strictEqual(cert.issuer.commonName, 'rootCA')
     strictEqual(cert.subject.commonName, 'rootCA')
 
-    // Node.js can't support RSASSA-PSS
     const data = Buffer.allocUnsafe(100)
     const signature = privateKey.sign(data, 'sha256')
     ok(cert.publicKey.verify(data, signature, 'sha256'))
@@ -134,7 +131,6 @@ suite('X509', function () {
     strictEqual(cert.issuer.commonName, 'Root CA')
     strictEqual(cert.subject.commonName, 'Root CA')
 
-    // Node.js can't support RSASSA-PSS
     const data = Buffer.allocUnsafe(100)
     const signature = privateKey.sign(data, 'sha256')
     ok(cert.publicKey.verify(data, signature, 'sha256'))
