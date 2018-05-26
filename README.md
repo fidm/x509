@@ -2,11 +2,11 @@
 Pure JavaScript X509 certificate tools for Node.js, includes PEM, ASN1 with DER.
 
 [![NPM version][npm-image]][npm-url]
-[![Build Status][travis-image]][travis-url]
 [![Coverage Status][coveralls-image]][coveralls-url]
 [![Downloads][downloads-image]][downloads-url]
 
-## Inspired by https://github.com/digitalbazaar/forge
+It support RSA, Ed25519.
+Inspired by https://github.com/digitalbazaar/forge
 
 ## example
 
@@ -295,6 +295,8 @@ Verifies the subjectKeyIdentifier extension value for this certificate against i
 
 #### certificate.toJSON() => any
 
+----------
+
 ### Class: DistinguishedName
 
 ```js
@@ -318,6 +320,8 @@ const { DistinguishedName } = require('@fidm/x509')
 #### distinguishedName.getField(key: string) => Attribute | null
 
 #### distinguishedName.toJSON() => any
+
+----------
 
 ### Class: PublicKey
 
@@ -367,6 +371,8 @@ certificate.publicKey.getFingerprint('sha1', 'PublicKey') // => Buffer
 #### publicKey.toPEM() => string
 
 #### publicKey.toJSON() => any
+
+----------
 
 ### Class: PrivateKey
 
@@ -427,6 +433,8 @@ Returns signature for the given data and hash algorithm.
 
 #### privateKey.toJSON() => any
 
+----------
+
 ### Class: RSAPublicKey extends PublicKey
 
 ```js
@@ -440,6 +448,8 @@ const { RSAPublicKey } = require('@fidm/x509')
 #### rsaPublicKey.modulus: string
 
 #### rsaPublicKey.toPublicKeyPEM (): string
+
+----------
 
 ### Class: RSAPrivateKey extends PrivateKey
 
@@ -466,6 +476,8 @@ const { RSAPrivateKey } = require('@fidm/x509')
 #### rsaPrivateKey.coefficient: string
 
 #### rsaPrivateKey.toPrivateKeyPEM (): string
+
+----------
 
 ### Class: ASN1
 
@@ -630,6 +642,8 @@ const oid = ASN1.parseOID(captures.publicKeyOID.bytes)
 
 #### asn1.toJSON() => any
 
+----------
+
 ### Class: BitString
 
 ```js
@@ -645,6 +659,8 @@ const { BitString } = require('@fidm/x509')
 #### bitString.at(i: number) => number
 
 #### bitString.rightAlign() => Buffer
+
+----------
 
 ### Class: PEM
 
@@ -669,6 +685,8 @@ Parse PEM formatted blocks form buffer, returns one or more blocks.
 
 #### pem.toJSON() => any
 
+----------
+
 ### Class: Visitor
 
 ```js
@@ -684,6 +702,8 @@ const { Visitor } = require('@fidm/x509')
 #### visitor.reset(start: number = 0, end: number = 0) => this
 
 #### visitor.walk(steps: number) => this
+
+----------
 
 ### Class: BufferVisitor extends Visitor
 
@@ -701,6 +721,8 @@ const { BufferVisitor } = require('@fidm/x509')
 
 #### bufferVisitor.mustWalk(steps: number, message?: string) => this
 
+----------
+
 ### Others
 
 ```js
@@ -715,11 +737,14 @@ const { bytesFromIP, bytesToIP, getOID, getOIDName } = require('@fidm/x509')
 
 #### function getOIDName (nameOrId: string) => string
 
+----------
+
+### License
+@fidm/x509 is licensed under the [MIT](https://github.com/fidm/x509/blob/master/LICENSE) license.
+Copyright &copy; 2018 FIdM.
+
 [npm-url]: https://www.npmjs.com/package/@fidm/x509
 [npm-image]: https://img.shields.io/npm/v/@fidm/x509.svg
-
-[travis-url]: https://travis-ci.org/fidm/x509
-[travis-image]: https://img.shields.io/travis/fidm/x509.svg
 
 [coveralls-url]: https://coveralls.io/r/fidm/x509
 [coveralls-image]: https://coveralls.io/repos/fidm/x509/badge.svg
