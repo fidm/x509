@@ -6,9 +6,8 @@
 import { inspect } from 'util'
 import { createVerify, createSign, createHash } from 'crypto'
 import { sign as ed25519 } from 'tweetnacl'
-import { PEM } from './pem'
+import { PEM, ASN1, Class, Tag, Template, Captures } from '@fidm/asn1'
 import { getOID, getOIDName } from './common'
-import { ASN1, Class, Tag, Template, Captures } from './asn1'
 
 // PKCS#8 Public Key
 export const publicKeyValidator: Template = {
@@ -270,6 +269,9 @@ export class PublicKey {
     return this._finalPEM
   }
 
+  /**
+   * Return a friendly JSON object for debuging.
+   */
   toJSON (): any {
     return {
       oid: this.oid,
@@ -278,7 +280,7 @@ export class PublicKey {
     }
   }
 
-  [inspect.custom] (_depth: any, options: any): string {
+  protected [inspect.custom] (_depth: any, options: any): string {
     return `<${this.constructor.name} ${inspect(this.toJSON(), options)}>`
   }
 }
@@ -356,12 +358,12 @@ export class PrivateKey {
     this._finalPEM = ''
 
     if (EdDSAPrivateKeyOIDs.includes(this.oid)) {
-      this._finalKey = this._keyRaw = ASN1.parseDER(Class.UNIVERSAL, Tag.OCTETSTRING, this._keyRaw).bytes
+      this._finalKey = this._keyRaw = ASN1.parseDER(this._keyRaw, Class.UNIVERSAL, Tag.OCTETSTRING).bytes
       if (this.version === 1) {
         for (const val of obj.mustCompound()) {
           if (val.class === Class.CONTEXT_SPECIFIC && val.tag === 1) {
             this._publicKeyRaw = ASN1.parseBitString(val.bytes).buf
-            this._finalKey = Buffer.concat([this._keyRaw, this._publicKeyRaw])
+            this._finalKey = Buffer.concat([this._keyRaw, this._publicKeyRaw as Buffer])
           }
         }
       }
@@ -373,10 +375,7 @@ export class PrivateKey {
   }
 
   // Returns publicKey buffer, it is used for Ed25519/Ed448.
-  get publicKeyRaw (): Buffer {
-    if (this._publicKeyRaw == null) {
-      throw new Error('Public key not exists')
-    }
+  get publicKeyRaw (): Buffer | null {
     return this._publicKeyRaw
   }
 
@@ -420,6 +419,9 @@ export class PrivateKey {
     return this._finalPEM
   }
 
+  /**
+   * Return a friendly JSON object for debuging.
+   */
   toJSON (): any {
     return {
       version: this.version,
@@ -430,7 +432,7 @@ export class PrivateKey {
     }
   }
 
-  [inspect.custom] (_depth: any, options: any): string {
+  protected [inspect.custom] (_depth: any, options: any): string {
     return `<${this.constructor.name} ${inspect(this.toJSON(), options)}>`
   }
 }
@@ -460,6 +462,9 @@ export class RSAPublicKey extends PublicKey {
     this.exponent = ASN1.parseIntegerNum(captures.publicKeyExponent.bytes)
   }
 
+  /**
+   * Return a friendly JSON object for debuging.
+   */
   toJSON (): any {
     return {
       oid: this.oid,
@@ -488,7 +493,7 @@ export class RSAPublicKey extends PublicKey {
     return new PEM('PUBLIC KEY', this._pkcs8.DER).toString()
   }
 
-  [inspect.custom] (_depth: any, options: any): string {
+  protected [inspect.custom] (_depth: any, options: any): string {
     return `<${this.constructor.name} ${inspect(this.toJSON(), options)}>`
   }
 }
@@ -530,6 +535,9 @@ export class RSAPrivateKey extends PrivateKey {
     this.coefficient = ASN1.parseIntegerStr(captures.privateKeyCoefficient.bytes)
   }
 
+  /**
+   * Return a friendly JSON object for debuging.
+   */
   toJSON (): any {
     return {
       version: this.version,
@@ -565,7 +573,7 @@ export class RSAPrivateKey extends PrivateKey {
     return new PEM('PRIVATE KEY', this._pkcs8.DER).toString()
   }
 
-  [inspect.custom] (_depth: any, options: any): string {
+  protected [inspect.custom] (_depth: any, options: any): string {
     return `<${this.constructor.name} ${inspect(this.toJSON(), options)}>`
   }
 }

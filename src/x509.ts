@@ -5,9 +5,8 @@
 
 import { inspect } from 'util'
 import { createHash } from 'crypto'
+import { PEM, ASN1, Class, Tag, Template, Captures, BitString } from '@fidm/asn1'
 import { bytesToIP, getOID, getOIDName } from './common'
-import { ASN1, Class, Tag, Template, Captures, BitString } from './asn1'
-import { PEM } from './pem'
 import { publicKeyValidator, PublicKey } from './pki'
 
 // short name OID mappings
@@ -460,6 +459,9 @@ export class Certificate {
     return ski.toString('hex') === this.subjectKeyIdentifier
   }
 
+  /**
+   * Return a friendly JSON object for debuging.
+   */
   toJSON (): any {
     const obj = {} as any
     for (const key of Object.keys(this)) {
@@ -469,7 +471,7 @@ export class Certificate {
     return obj
   }
 
-  [inspect.custom] (_depth: any, options: any): string {
+  protected [inspect.custom] (_depth: any, options: any): string {
     if (options.depth <= 2) {
       options.depth = 10
     }

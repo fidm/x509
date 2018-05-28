@@ -5,61 +5,6 @@
 
 import { isIP } from 'net'
 
-export class Visitor {
-  start: number
-  end: number
-  constructor (start: number = 0, end: number = 0) {
-    this.start = start
-    this.end = end > start ? end : start
-  }
-
-  reset (start: number = 0, end: number = 0): this {
-    this.start = start
-    if (end >= this.start) {
-      this.end = end
-    } else if (this.end < this.start) {
-      this.end = this.start
-    }
-    return this
-  }
-
-  walk (steps: number): this {
-    this.start = this.end
-    this.end += steps
-    return this
-  }
-}
-
-export class BufferVisitor extends Visitor {
-  readonly buf: Buffer
-  constructor (buf: Buffer, start: number = 0, end: number = 0) {
-    super(start, end)
-    this.buf = buf
-  }
-
-  get length () {
-    return this.buf.length
-  }
-
-  mustHas (steps: number, message: string = 'Too few bytes to parse.'): this {
-    const requested = this.end + steps
-    if (requested > this.buf.length) {
-      const error = new Error(message) as any
-      error.available = this.buf.length
-      error.requested = requested
-      throw error
-    }
-    this.walk(0)
-    return this
-  }
-
-  mustWalk (steps: number, message?: string): this {
-    this.mustHas(steps, message)
-    this.walk(steps)
-    return this
-  }
-}
-
 export function bytesFromIP (ip: string): Buffer | null {
   switch (isIP(ip)) {
   case 4:

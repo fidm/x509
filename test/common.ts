@@ -5,46 +5,9 @@
 
 import { strictEqual, ok } from 'assert'
 import { suite, it } from 'tman'
-import { Visitor, BufferVisitor, bytesFromIP, bytesToIP, getOID, getOIDName } from '../src/common'
+import { bytesFromIP, bytesToIP, getOID, getOIDName } from '../src/index'
 
 suite('common', function () {
-  it('Visitor', function () {
-    const v = new Visitor(0)
-    strictEqual(v.start, 0)
-    strictEqual(v.end, 0)
-    v.walk(10)
-    strictEqual(v.start, 0)
-    strictEqual(v.end, 10)
-    v.walk(100)
-    strictEqual(v.start, 10)
-    strictEqual(v.end, 110)
-    v.reset(10)
-    strictEqual(v.start, 10)
-    strictEqual(v.end, 110)
-    v.reset(20, 20)
-    strictEqual(v.start, 20)
-    strictEqual(v.end, 20)
-    v.reset(0, 200)
-    strictEqual(v.start, 0)
-    strictEqual(v.end, 200)
-    v.reset(0, 0)
-    strictEqual(v.start, 0)
-    strictEqual(v.end, 0)
-  })
-
-  it('BufferVisitor', function () {
-    const bufv = new BufferVisitor(Buffer.allocUnsafe(10))
-    bufv.walk(1)
-    bufv.walk(2)
-    bufv.buf.writeUIntBE(0, bufv.start, bufv.end - bufv.start)
-    bufv.walk(4)
-    bufv.buf.writeUIntBE(0, bufv.start, bufv.end - bufv.start)
-    bufv.reset()
-    bufv.walk(3)
-    bufv.walk(4)
-    strictEqual(bufv.buf.readUIntBE(bufv.start, bufv.end - bufv.start), 0)
-  })
-
   it('bytesFromIP', function () {
     strictEqual(bytesFromIP('.1.1.1'), null)
     strictEqual(bytesFromIP('a.1.1.1'), null)

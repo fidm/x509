@@ -6,8 +6,7 @@
 import fs from 'fs'
 import { strictEqual, deepEqual, ok } from 'assert'
 import { suite, it } from 'tman'
-import { Certificate } from '../src/x509'
-import { RSAPublicKey, PrivateKey } from '../src/pki'
+import { Certificate, RSAPublicKey, PrivateKey } from '../src/index'
 
 suite('X509', function () {
   it('should work for github certificate', function () {
