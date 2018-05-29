@@ -17,7 +17,7 @@ suite('PKI', function () {
     strictEqual(privateKey.algo, 'rsaEncryption')
     strictEqual(privateKeyP8.algo, 'rsaEncryption')
     strictEqual(privateKeyRSA.algo, 'rsaEncryption')
-    strictEqual(privateKeyRSA.version, 0)
+    strictEqual(privateKeyRSA.version, 1)
     strictEqual(privateKeyRSA.publicExponent, 65537)
 
     // Node.js can't support RSASSA-PSS

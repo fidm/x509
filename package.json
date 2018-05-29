@@ -4,7 +4,7 @@
   "authors": [
     "Yan Qing <admin@zensh.com>"
   ],
-  "version": "1.1.0",
+  "version": "1.1.1",
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "license": "MIT",
@@ -28,7 +28,7 @@
     "node"
   ],
   "dependencies": {
-    "@fidm/asn1": "^1.0.0",
+    "@fidm/asn1": "^1.0.1",
     "tweetnacl": "^1.0.0"
   },
   "devDependencies": {
@@ -42,10 +42,11 @@
     "typescript": "^2.8.3"
   },
   "scripts": {
-    "test-cov": "istanbul cover _tman -- 'test/**/*.ts' -r ts-node/register",
+    "build": "rm -rf build && tsc",
+    "docs": "rm -rf docs && typedoc --out docs && touch docs/.nojekyll",
     "test": "tman -r ts-node/register 'test/**/*.ts'",
-    "lint": "tslint -p tsconfig.json -t stylish 'src/**/*.ts' 'test/**/*.ts'",
-    "build": "rm -rf build && tsc"
+    "test-cov": "istanbul cover _tman -- 'test/**/*.ts' -r ts-node/register",
+    "lint": "tslint -p tsconfig.json -t stylish 'src/**/*.ts' 'test/**/*.ts'"
   },
   "files": [
     "build",

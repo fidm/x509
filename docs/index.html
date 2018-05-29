@@ -1,0 +1,505 @@
+<!doctype html>
+<html class="default no-js">
+<head>
+	<meta charset="utf-8">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<title>@fidm/x509</title>
+	<meta name="description" content="">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<link rel="stylesheet" href="assets/css/main.css">
+</head>
+<body>
+<header>
+	<div class="tsd-page-toolbar">
+		<div class="container">
+			<div class="table-wrap">
+				<div class="table-cell" id="tsd-search" data-index="assets/js/search.js" data-base=".">
+					<div class="field">
+						<label for="tsd-search-field" class="tsd-widget search no-caption">Search</label>
+						<input id="tsd-search-field" type="text" />
+					</div>
+					<ul class="results">
+						<li class="state loading">Preparing search index...</li>
+						<li class="state failure">The search index is not available</li>
+					</ul>
+					<a href="index.html" class="title">@fidm/x509</a>
+				</div>
+				<div class="table-cell" id="tsd-widgets">
+					<div id="tsd-filter">
+						<a href="#" class="tsd-widget options no-caption" data-toggle="options">Options</a>
+						<div class="tsd-filter-group">
+							<div class="tsd-select" id="tsd-filter-visibility">
+								<span class="tsd-select-label">All</span>
+								<ul class="tsd-select-list">
+									<li data-value="public">Public</li>
+									<li data-value="protected">Public/Protected</li>
+									<li data-value="private" class="selected">All</li>
+								</ul>
+							</div>
+							<input type="checkbox" id="tsd-filter-inherited" checked />
+							<label class="tsd-widget" for="tsd-filter-inherited">Inherited</label>
+							<input type="checkbox" id="tsd-filter-externals" checked />
+							<label class="tsd-widget" for="tsd-filter-externals">Externals</label>
+							<input type="checkbox" id="tsd-filter-only-exported" />
+							<label class="tsd-widget" for="tsd-filter-only-exported">Only exported</label>
+						</div>
+					</div>
+					<a href="#" class="tsd-widget menu no-caption" data-toggle="menu">Menu</a>
+				</div>
+			</div>
+		</div>
+	</div>
+	<div class="tsd-page-title">
+		<div class="container">
+			<ul class="tsd-breadcrumb">
+				<li>
+					<a href="globals.html">Globals</a>
+				</li>
+			</ul>
+			<h1> @fidm/x509</h1>
+		</div>
+	</div>
+</header>
+<div class="container container-main">
+	<div class="row">
+		<div class="col-8 col-content">
+			<div class="tsd-panel tsd-typography">
+				<h1 id="x509"><a href="https://github.com/fidm/x509">x509</a></h1>
+				<p>Pure JavaScript X509 certificate tools for Node.js.</p>
+				<p><a href="https://www.npmjs.com/package/@fidm/x509"><img src="https://img.shields.io/npm/v/@fidm/x509.svg" alt="NPM version"></a>
+					<a href="https://travis-ci.org/fidm/x509"><img src="http://img.shields.io/travis/fidm/x509.svg" alt="Build Status"></a>
+				<a href="https://npmjs.org/package/@fidm/x509"><img src="https://img.shields.io/npm/dm/@fidm/x509.svg?style=flat-square" alt="Downloads"></a></p>
+				<p>It support RSA, Ed25519.
+				Inspired by <a href="https://github.com/digitalbazaar/forge">https://github.com/digitalbazaar/forge</a></p>
+				<h2 id="install">Install</h2>
+				<pre><code><span class="hljs-built_in">npm</span> i --save @fidm/x509
+</code></pre><h2 id="documentation">Documentation</h2>
+				<p><a href="https://fidm.github.io/x509/">https://fidm.github.io/x509/</a></p>
+				<h2 id="example">Example</h2>
+				<h3 id="support-ed25519-certificate">Support ed25519 certificate</h3>
+				<pre><code class="lang-js"><span class="hljs-keyword">const</span> fs = <span class="hljs-built_in">require</span>(<span class="hljs-string">'fs'</span>)
+
+<span class="hljs-keyword">const</span> { Certificate, PrivateKey } = <span class="hljs-built_in">require</span>(<span class="hljs-string">'@fidm/x509'</span>)
+
+<span class="hljs-keyword">const</span> ed25519Cert = Certificate.fromPEM(fs.readFileSync(<span class="hljs-string">'./test/cert/ed25519-server-cert.pem'</span>))
+<span class="hljs-keyword">const</span> privateKey = PrivateKey.fromPEM(fs.readFileSync(<span class="hljs-string">'./test/cert/ed25519-server-key.pem'</span>))
+
+privateKey.setPublicKey(ed25519Cert.publicKey)
+<span class="hljs-keyword">const</span> data = Buffer.allocUnsafe(<span class="hljs-number">100</span>)
+<span class="hljs-keyword">const</span> signature = privateKey.sign(data, <span class="hljs-string">'sha256'</span>)
+<span class="hljs-built_in">console</span>.log(ed25519Cert.publicKey.verify(data, signature, <span class="hljs-string">'sha256'</span>)) <span class="hljs-comment">// true</span>
+</code></pre>
+				<h3 id="parse-githu-com-certificate">Parse githu.com&#39; certificate</h3>
+				<pre><code class="lang-js"><span class="hljs-keyword">const</span> fs = <span class="hljs-built_in">require</span>(<span class="hljs-string">'fs'</span>)
+<span class="hljs-keyword">const</span> { Certificate } = <span class="hljs-built_in">require</span>(<span class="hljs-string">'@fidm/x509'</span>)
+<span class="hljs-keyword">const</span> issuer = Certificate.fromPEM(fs.readFileSync(<span class="hljs-string">'./test/cert/github-issuer.crt'</span>))
+<span class="hljs-keyword">const</span> cert = Certificate.fromPEM(fs.readFileSync(<span class="hljs-string">'./test/cert/github.crt'</span>))
+<span class="hljs-built_in">console</span>.log(cert.isIssuer(issuer)) <span class="hljs-comment">// true</span>
+<span class="hljs-built_in">console</span>.log(issuer.verifySubjectKeyIdentifier()) <span class="hljs-comment">// true</span>
+<span class="hljs-built_in">console</span>.log(cert.verifySubjectKeyIdentifier()) <span class="hljs-comment">// true</span>
+<span class="hljs-built_in">console</span>.log(issuer.checkSignature(cert)) <span class="hljs-comment">// null</span>
+<span class="hljs-built_in">console</span>.log(issuer)
+<span class="hljs-comment">// &lt;Certificate { version: 3,</span>
+<span class="hljs-comment">//   serialNumber: '0c79a944b08c11952092615fe26b1d83',</span>
+<span class="hljs-comment">//   signatureOID: '1.2.840.113549.1.1.11',</span>
+<span class="hljs-comment">//   signatureAlgorithm: 'sha256WithRsaEncryption',</span>
+<span class="hljs-comment">//   infoSignatureOID: '1.2.840.113549.1.1.11',</span>
+<span class="hljs-comment">//   signature: &lt;Buffer 9d b6 d0 90 86 e1 86 02 ed c5 a0 f0 34 1c 74 c1 8d 76 cc 86 0a a8 f0 4a 8a 42 d6 3f c8 a9 4d ad 7c 08 ad e6 b6 50 b8 a2 1a 4d 88 07 b1 29 21 dc e7 da ... &gt;,</span>
+<span class="hljs-comment">//   validFrom: '2013-10-22T12:00:00.000Z',</span>
+<span class="hljs-comment">//   validTo: '2028-10-22T12:00:00.000Z',</span>
+<span class="hljs-comment">//   issuer:</span>
+<span class="hljs-comment">//    { C: 'US',</span>
+<span class="hljs-comment">//      O: 'DigiCert Inc',</span>
+<span class="hljs-comment">//      OU: 'www.digicert.com',</span>
+<span class="hljs-comment">//      CN: 'DigiCert High Assurance EV Root CA',</span>
+<span class="hljs-comment">//      uniqueId: null,</span>
+<span class="hljs-comment">//      attributes:</span>
+<span class="hljs-comment">//       [ { oid: '2.5.4.6',</span>
+<span class="hljs-comment">//           value: 'US',</span>
+<span class="hljs-comment">//           valueTag: 19,</span>
+<span class="hljs-comment">//           name: 'countryName',</span>
+<span class="hljs-comment">//           shortName: 'C' },</span>
+<span class="hljs-comment">//         { oid: '2.5.4.10',</span>
+<span class="hljs-comment">//           value: 'DigiCert Inc',</span>
+<span class="hljs-comment">//           valueTag: 19,</span>
+<span class="hljs-comment">//           name: 'organizationName',</span>
+<span class="hljs-comment">//           shortName: 'O' },</span>
+<span class="hljs-comment">//         { oid: '2.5.4.11',</span>
+<span class="hljs-comment">//           value: 'www.digicert.com',</span>
+<span class="hljs-comment">//           valueTag: 19,</span>
+<span class="hljs-comment">//           name: 'organizationalUnitName',</span>
+<span class="hljs-comment">//           shortName: 'OU' },</span>
+<span class="hljs-comment">//         { oid: '2.5.4.3',</span>
+<span class="hljs-comment">//           value: 'DigiCert High Assurance EV Root CA',</span>
+<span class="hljs-comment">//           valueTag: 19,</span>
+<span class="hljs-comment">//           name: 'commonName',</span>
+<span class="hljs-comment">//           shortName: 'CN' } ] },</span>
+<span class="hljs-comment">//   subject:</span>
+<span class="hljs-comment">//    { C: 'US',</span>
+<span class="hljs-comment">//      O: 'DigiCert Inc',</span>
+<span class="hljs-comment">//      OU: 'www.digicert.com',</span>
+<span class="hljs-comment">//      CN: 'DigiCert SHA2 Extended Validation Server CA',</span>
+<span class="hljs-comment">//      uniqueId: null,</span>
+<span class="hljs-comment">//      attributes:</span>
+<span class="hljs-comment">//       [ { oid: '2.5.4.6',</span>
+<span class="hljs-comment">//           value: 'US',</span>
+<span class="hljs-comment">//           valueTag: 19,</span>
+<span class="hljs-comment">//           name: 'countryName',</span>
+<span class="hljs-comment">//           shortName: 'C' },</span>
+<span class="hljs-comment">//         { oid: '2.5.4.10',</span>
+<span class="hljs-comment">//           value: 'DigiCert Inc',</span>
+<span class="hljs-comment">//           valueTag: 19,</span>
+<span class="hljs-comment">//           name: 'organizationName',</span>
+<span class="hljs-comment">//           shortName: 'O' },</span>
+<span class="hljs-comment">//         { oid: '2.5.4.11',</span>
+<span class="hljs-comment">//           value: 'www.digicert.com',</span>
+<span class="hljs-comment">//           valueTag: 19,</span>
+<span class="hljs-comment">//           name: 'organizationalUnitName',</span>
+<span class="hljs-comment">//           shortName: 'OU' },</span>
+<span class="hljs-comment">//         { oid: '2.5.4.3',</span>
+<span class="hljs-comment">//           value: 'DigiCert SHA2 Extended Validation Server CA',</span>
+<span class="hljs-comment">//           valueTag: 19,</span>
+<span class="hljs-comment">//           name: 'commonName',</span>
+<span class="hljs-comment">//           shortName: 'CN' } ] },</span>
+<span class="hljs-comment">//   extensions:</span>
+<span class="hljs-comment">//    [ { id: '2.5.29.19',</span>
+<span class="hljs-comment">//        critical: true,</span>
+<span class="hljs-comment">//        value: &lt;Buffer 30 06 01 01 ff 02 01 00&gt;,</span>
+<span class="hljs-comment">//        name: 'basicConstraints',</span>
+<span class="hljs-comment">//        isCA: true,</span>
+<span class="hljs-comment">//        maxPathLen: 0,</span>
+<span class="hljs-comment">//        basicConstraintsValid: true },</span>
+<span class="hljs-comment">//      { id: '2.5.29.15',</span>
+<span class="hljs-comment">//        critical: true,</span>
+<span class="hljs-comment">//        value: &lt;Buffer 03 02 01 86&gt;,</span>
+<span class="hljs-comment">//        name: 'keyUsage',</span>
+<span class="hljs-comment">//        keyUsage: 97,</span>
+<span class="hljs-comment">//        digitalSignature: true,</span>
+<span class="hljs-comment">//        nonRepudiation: false,</span>
+<span class="hljs-comment">//        keyEncipherment: false,</span>
+<span class="hljs-comment">//        dataEncipherment: false,</span>
+<span class="hljs-comment">//        keyAgreement: false,</span>
+<span class="hljs-comment">//        keyCertSign: true,</span>
+<span class="hljs-comment">//        cRLSign: true,</span>
+<span class="hljs-comment">//        encipherOnly: false,</span>
+<span class="hljs-comment">//        decipherOnly: false },</span>
+<span class="hljs-comment">//      { id: '2.5.29.37',</span>
+<span class="hljs-comment">//        critical: false,</span>
+<span class="hljs-comment">//        value: &lt;Buffer 30 14 06 08 2b 06 01 05 05 07 03 01 06 08 2b 06 01 05 05 07 03 02&gt;,</span>
+<span class="hljs-comment">//        name: 'extKeyUsage',</span>
+<span class="hljs-comment">//        serverAuth: true,</span>
+<span class="hljs-comment">//        clientAuth: true },</span>
+<span class="hljs-comment">//      { id: '1.3.6.1.5.5.7.1.1',</span>
+<span class="hljs-comment">//        critical: false,</span>
+<span class="hljs-comment">//        value: &lt;Buffer 30 26 30 24 06 08 2b 06 01 05 05 07 30 01 86 18 68 74 74 70 3a 2f 2f 6f 63 73 70 2e 64 69 67 69 63 65 72 74 2e 63 6f 6d&gt;,</span>
+<span class="hljs-comment">//        name: 'authorityInfoAccess',</span>
+<span class="hljs-comment">//        authorityInfoAccessOcsp: 'http://ocsp.digicert.com' },</span>
+<span class="hljs-comment">//      { id: '2.5.29.31',</span>
+<span class="hljs-comment">//        critical: false,</span>
+<span class="hljs-comment">//        value: &lt;Buffer 30 42 30 40 a0 3e a0 3c 86 3a 68 74 74 70 3a 2f 2f 63 72 6c 34 2e 64 69 67 69 63 65 72 74 2e 63 6f 6d 2f 44 69 67 69 43 65 72 74 48 69 67 68 41 73 73 ... &gt;,</span>
+<span class="hljs-comment">//        name: 'cRLDistributionPoints' },</span>
+<span class="hljs-comment">//      { id: '2.5.29.32',</span>
+<span class="hljs-comment">//        critical: false,</span>
+<span class="hljs-comment">//        value: &lt;Buffer 30 34 30 32 06 04 55 1d 20 00 30 2a 30 28 06 08 2b 06 01 05 05 07 02 01 16 1c 68 74 74 70 73 3a 2f 2f 77 77 77 2e 64 69 67 69 63 65 72 74 2e 63 6f 6d ... &gt;,</span>
+<span class="hljs-comment">//        name: 'certificatePolicies' },</span>
+<span class="hljs-comment">//      { id: '2.5.29.14',</span>
+<span class="hljs-comment">//        critical: false,</span>
+<span class="hljs-comment">//        value: &lt;Buffer 04 14 3d d3 50 a5 d6 a0 ad ee f3 4a 60 0a 65 d3 21 d4 f8 f8 d6 0f&gt;,</span>
+<span class="hljs-comment">//        name: 'subjectKeyIdentifier',</span>
+<span class="hljs-comment">//        subjectKeyIdentifier: '3dd350a5d6a0adeef34a600a65d321d4f8f8d60f' },</span>
+<span class="hljs-comment">//      { id: '2.5.29.35',</span>
+<span class="hljs-comment">//        critical: false,</span>
+<span class="hljs-comment">//        value: &lt;Buffer 30 16 80 14 b1 3e c3 69 03 f8 bf 47 01 d4 98 26 1a 08 02 ef 63 64 2b c3&gt;,</span>
+<span class="hljs-comment">//        name: 'authorityKeyIdentifier',</span>
+<span class="hljs-comment">//        authorityKeyIdentifier: 'b13ec36903f8bf4701d498261a0802ef63642bc3' } ],</span>
+<span class="hljs-comment">//   subjectKeyIdentifier: '3dd350a5d6a0adeef34a600a65d321d4f8f8d60f',</span>
+<span class="hljs-comment">//   authorityKeyIdentifier: 'b13ec36903f8bf4701d498261a0802ef63642bc3',</span>
+<span class="hljs-comment">//   ocspServer: 'http://ocsp.digicert.com',</span>
+<span class="hljs-comment">//   issuingCertificateURL: '',</span>
+<span class="hljs-comment">//   isCA: true,</span>
+<span class="hljs-comment">//   maxPathLen: 0,</span>
+<span class="hljs-comment">//   basicConstraintsValid: true,</span>
+<span class="hljs-comment">//   keyUsage: 97,</span>
+<span class="hljs-comment">//   dnsNames: [],</span>
+<span class="hljs-comment">//   emailAddresses: [],</span>
+<span class="hljs-comment">//   ipAddresses: [],</span>
+<span class="hljs-comment">//   uris: [],</span>
+<span class="hljs-comment">//   publicKey:</span>
+<span class="hljs-comment">//    { oid: '1.2.840.113549.1.1.1',</span>
+<span class="hljs-comment">//      algo: 'rsaEncryption',</span>
+<span class="hljs-comment">//      publicKey: &lt;Buffer 30 82 01 0a 02 82 01 01 00 d7 53 a4 04 51 f8 99 a6 16 48 4b 67 27 aa 93 49 d0 39 ed 0c b0 b0 00 87 f1 67 28 86 85 8c 8e 63 da bc b1 40 38 e2 d3 f5 ec ... &gt; },</span>
+<span class="hljs-comment">//   publicKeyRaw: &lt;Buffer 30 82 01 22 30 0d 06 09 2a 86 48 86 f7 0d 01 01 01 05 00 03 82 01 0f 00 30 82 01 0a 02 82 01 01 00 d7 53 a4 04 51 f8 99 a6 16 48 4b 67 27 aa 93 49 d0 ... &gt; }&gt;</span>
+
+<span class="hljs-built_in">console</span>.log(cert)
+<span class="hljs-comment">// &lt;Certificate { version: 3,</span>
+<span class="hljs-comment">//   serialNumber: '0a0630427f5bbced6957396593b6451f',</span>
+<span class="hljs-comment">//   signatureOID: '1.2.840.113549.1.1.11',</span>
+<span class="hljs-comment">//   signatureAlgorithm: 'sha256WithRsaEncryption',</span>
+<span class="hljs-comment">//   infoSignatureOID: '1.2.840.113549.1.1.11',</span>
+<span class="hljs-comment">//   signature: &lt;Buffer 70 0f 5a 96 a7 58 e5 bf 8a 9d a8 27 98 2b 00 7f 26 a9 07 da ba 7b 82 54 4f af 69 cf bc f2 59 03 2b f2 d5 74 58 25 d8 1e a4 20 76 62 60 29 73 2a d7 dc ... &gt;,</span>
+<span class="hljs-comment">//   validFrom: '2018-05-08T00:00:00.000Z',</span>
+<span class="hljs-comment">//   validTo: '2020-06-03T12:00:00.000Z',</span>
+<span class="hljs-comment">//   issuer:</span>
+<span class="hljs-comment">//    { C: 'US',</span>
+<span class="hljs-comment">//      O: 'DigiCert Inc',</span>
+<span class="hljs-comment">//      OU: 'www.digicert.com',</span>
+<span class="hljs-comment">//      CN: 'DigiCert SHA2 Extended Validation Server CA',</span>
+<span class="hljs-comment">//      uniqueId: null,</span>
+<span class="hljs-comment">//      attributes:</span>
+<span class="hljs-comment">//       [ { oid: '2.5.4.6',</span>
+<span class="hljs-comment">//           value: 'US',</span>
+<span class="hljs-comment">//           valueTag: 19,</span>
+<span class="hljs-comment">//           name: 'countryName',</span>
+<span class="hljs-comment">//           shortName: 'C' },</span>
+<span class="hljs-comment">//         { oid: '2.5.4.10',</span>
+<span class="hljs-comment">//           value: 'DigiCert Inc',</span>
+<span class="hljs-comment">//           valueTag: 19,</span>
+<span class="hljs-comment">//           name: 'organizationName',</span>
+<span class="hljs-comment">//           shortName: 'O' },</span>
+<span class="hljs-comment">//         { oid: '2.5.4.11',</span>
+<span class="hljs-comment">//           value: 'www.digicert.com',</span>
+<span class="hljs-comment">//           valueTag: 19,</span>
+<span class="hljs-comment">//           name: 'organizationalUnitName',</span>
+<span class="hljs-comment">//           shortName: 'OU' },</span>
+<span class="hljs-comment">//         { oid: '2.5.4.3',</span>
+<span class="hljs-comment">//           value: 'DigiCert SHA2 Extended Validation Server CA',</span>
+<span class="hljs-comment">//           valueTag: 19,</span>
+<span class="hljs-comment">//           name: 'commonName',</span>
+<span class="hljs-comment">//           shortName: 'CN' } ] },</span>
+<span class="hljs-comment">//   subject:</span>
+<span class="hljs-comment">//    { C: 'US',</span>
+<span class="hljs-comment">//      ST: 'California',</span>
+<span class="hljs-comment">//      L: 'San Francisco',</span>
+<span class="hljs-comment">//      O: 'GitHub, Inc.',</span>
+<span class="hljs-comment">//      CN: 'github.com',</span>
+<span class="hljs-comment">//      uniqueId: null,</span>
+<span class="hljs-comment">//      attributes:</span>
+<span class="hljs-comment">//       [ { oid: '2.5.4.15',</span>
+<span class="hljs-comment">//           value: 'Private Organization',</span>
+<span class="hljs-comment">//           valueTag: 12,</span>
+<span class="hljs-comment">//           name: 'businessCategory',</span>
+<span class="hljs-comment">//           shortName: '' },</span>
+<span class="hljs-comment">//         { oid: '1.3.6.1.4.1.311.60.2.1.3',</span>
+<span class="hljs-comment">//           value: 'US',</span>
+<span class="hljs-comment">//           valueTag: 19,</span>
+<span class="hljs-comment">//           name: 'jurisdictionC',</span>
+<span class="hljs-comment">//           shortName: '' },</span>
+<span class="hljs-comment">//         { oid: '1.3.6.1.4.1.311.60.2.1.2',</span>
+<span class="hljs-comment">//           value: 'Delaware',</span>
+<span class="hljs-comment">//           valueTag: 19,</span>
+<span class="hljs-comment">//           name: 'jurisdictionST',</span>
+<span class="hljs-comment">//           shortName: '' },</span>
+<span class="hljs-comment">//         { oid: '2.5.4.5',</span>
+<span class="hljs-comment">//           value: '5157550',</span>
+<span class="hljs-comment">//           valueTag: 19,</span>
+<span class="hljs-comment">//           name: 'serialName',</span>
+<span class="hljs-comment">//           shortName: '' },</span>
+<span class="hljs-comment">//         { oid: '2.5.4.6',</span>
+<span class="hljs-comment">//           value: 'US',</span>
+<span class="hljs-comment">//           valueTag: 19,</span>
+<span class="hljs-comment">//           name: 'countryName',</span>
+<span class="hljs-comment">//           shortName: 'C' },</span>
+<span class="hljs-comment">//         { oid: '2.5.4.8',</span>
+<span class="hljs-comment">//           value: 'California',</span>
+<span class="hljs-comment">//           valueTag: 19,</span>
+<span class="hljs-comment">//           name: 'stateOrProvinceName',</span>
+<span class="hljs-comment">//           shortName: 'ST' },</span>
+<span class="hljs-comment">//         { oid: '2.5.4.7',</span>
+<span class="hljs-comment">//           value: 'San Francisco',</span>
+<span class="hljs-comment">//           valueTag: 19,</span>
+<span class="hljs-comment">//           name: 'localityName',</span>
+<span class="hljs-comment">//           shortName: 'L' },</span>
+<span class="hljs-comment">//         { oid: '2.5.4.10',</span>
+<span class="hljs-comment">//           value: 'GitHub, Inc.',</span>
+<span class="hljs-comment">//           valueTag: 19,</span>
+<span class="hljs-comment">//           name: 'organizationName',</span>
+<span class="hljs-comment">//           shortName: 'O' },</span>
+<span class="hljs-comment">//         { oid: '2.5.4.3',</span>
+<span class="hljs-comment">//           value: 'github.com',</span>
+<span class="hljs-comment">//           valueTag: 19,</span>
+<span class="hljs-comment">//           name: 'commonName',</span>
+<span class="hljs-comment">//           shortName: 'CN' } ] },</span>
+<span class="hljs-comment">//   extensions:</span>
+<span class="hljs-comment">//    [ { id: '2.5.29.35',</span>
+<span class="hljs-comment">//        critical: false,</span>
+<span class="hljs-comment">//        value: &lt;Buffer 30 16 80 14 3d d3 50 a5 d6 a0 ad ee f3 4a 60 0a 65 d3 21 d4 f8 f8 d6 0f&gt;,</span>
+<span class="hljs-comment">//        name: 'authorityKeyIdentifier',</span>
+<span class="hljs-comment">//        authorityKeyIdentifier: '3dd350a5d6a0adeef34a600a65d321d4f8f8d60f' },</span>
+<span class="hljs-comment">//      { id: '2.5.29.14',</span>
+<span class="hljs-comment">//        critical: false,</span>
+<span class="hljs-comment">//        value: &lt;Buffer 04 14 c9 c2 53 61 66 9d 5f ab 25 f4 26 cd 0f 38 9a a8 49 ea 48 a9&gt;,</span>
+<span class="hljs-comment">//        name: 'subjectKeyIdentifier',</span>
+<span class="hljs-comment">//        subjectKeyIdentifier: 'c9c25361669d5fab25f426cd0f389aa849ea48a9' },</span>
+<span class="hljs-comment">//      { id: '2.5.29.17',</span>
+<span class="hljs-comment">//        critical: false,</span>
+<span class="hljs-comment">//        value: &lt;Buffer 30 1c 82 0a 67 69 74 68 75 62 2e 63 6f 6d 82 0e 77 77 77 2e 67 69 74 68 75 62 2e 63 6f 6d&gt;,</span>
+<span class="hljs-comment">//        name: 'subjectAltName',</span>
+<span class="hljs-comment">//        altNames:</span>
+<span class="hljs-comment">//         [ { tag: 2,</span>
+<span class="hljs-comment">//             value: &lt;Buffer 67 69 74 68 75 62 2e 63 6f 6d&gt;,</span>
+<span class="hljs-comment">//             dnsName: 'github.com' },</span>
+<span class="hljs-comment">//           { tag: 2,</span>
+<span class="hljs-comment">//             value: &lt;Buffer 77 77 77 2e 67 69 74 68 75 62 2e 63 6f 6d&gt;,</span>
+<span class="hljs-comment">//             dnsName: 'www.github.com' } ] },</span>
+<span class="hljs-comment">//      { id: '2.5.29.15',</span>
+<span class="hljs-comment">//        critical: true,</span>
+<span class="hljs-comment">//        value: &lt;Buffer 03 02 05 a0&gt;,</span>
+<span class="hljs-comment">//        name: 'keyUsage',</span>
+<span class="hljs-comment">//        keyUsage: 5,</span>
+<span class="hljs-comment">//        digitalSignature: true,</span>
+<span class="hljs-comment">//        nonRepudiation: false,</span>
+<span class="hljs-comment">//        keyEncipherment: true,</span>
+<span class="hljs-comment">//        dataEncipherment: false,</span>
+<span class="hljs-comment">//        keyAgreement: false,</span>
+<span class="hljs-comment">//        keyCertSign: false,</span>
+<span class="hljs-comment">//        cRLSign: false,</span>
+<span class="hljs-comment">//        encipherOnly: false,</span>
+<span class="hljs-comment">//        decipherOnly: false },</span>
+<span class="hljs-comment">//      { id: '2.5.29.37',</span>
+<span class="hljs-comment">//        critical: false,</span>
+<span class="hljs-comment">//        value: &lt;Buffer 30 14 06 08 2b 06 01 05 05 07 03 01 06 08 2b 06 01 05 05 07 03 02&gt;,</span>
+<span class="hljs-comment">//        name: 'extKeyUsage',</span>
+<span class="hljs-comment">//        serverAuth: true,</span>
+<span class="hljs-comment">//        clientAuth: true },</span>
+<span class="hljs-comment">//      { id: '2.5.29.31',</span>
+<span class="hljs-comment">//        critical: false,</span>
+<span class="hljs-comment">//        value: &lt;Buffer 30 6c 30 34 a0 32 a0 30 86 2e 68 74 74 70 3a 2f 2f 63 72 6c 33 2e 64 69 67 69 63 65 72 74 2e 63 6f 6d 2f 73 68 61 32 2d 65 76 2d 73 65 72 76 65 72 2d ... &gt;,</span>
+<span class="hljs-comment">//        name: 'cRLDistributionPoints' },</span>
+<span class="hljs-comment">//      { id: '2.5.29.32',</span>
+<span class="hljs-comment">//        critical: false,</span>
+<span class="hljs-comment">//        value: &lt;Buffer 30 42 30 37 06 09 60 86 48 01 86 fd 6c 02 01 30 2a 30 28 06 08 2b 06 01 05 05 07 02 01 16 1c 68 74 74 70 73 3a 2f 2f 77 77 77 2e 64 69 67 69 63 65 72 ... &gt;,</span>
+<span class="hljs-comment">//        name: 'certificatePolicies' },</span>
+<span class="hljs-comment">//      { id: '1.3.6.1.5.5.7.1.1',</span>
+<span class="hljs-comment">//        critical: false,</span>
+<span class="hljs-comment">//        value: &lt;Buffer 30 7a 30 24 06 08 2b 06 01 05 05 07 30 01 86 18 68 74 74 70 3a 2f 2f 6f 63 73 70 2e 64 69 67 69 63 65 72 74 2e 63 6f 6d 30 52 06 08 2b 06 01 05 05 07 ... &gt;,</span>
+<span class="hljs-comment">//        name: 'authorityInfoAccess',</span>
+<span class="hljs-comment">//        authorityInfoAccessOcsp: 'http://ocsp.digicert.com',</span>
+<span class="hljs-comment">//        authorityInfoAccessIssuers: 'http://cacerts.digicert.com/DigiCertSHA2ExtendedValidationServerCA.crt' },</span>
+<span class="hljs-comment">//      { id: '2.5.29.19',</span>
+<span class="hljs-comment">//        critical: true,</span>
+<span class="hljs-comment">//        value: &lt;Buffer 30 00&gt;,</span>
+<span class="hljs-comment">//        name: 'basicConstraints',</span>
+<span class="hljs-comment">//        isCA: false,</span>
+<span class="hljs-comment">//        maxPathLen: -1,</span>
+<span class="hljs-comment">//        basicConstraintsValid: true },</span>
+<span class="hljs-comment">//      { id: '1.3.6.1.4.1.11129.2.4.2',</span>
+<span class="hljs-comment">//        critical: false,</span>
+<span class="hljs-comment">//        value: &lt;Buffer 04 82 01 6a 01 68 00 76 00 a4 b9 09 90 b4 18 58 14 87 bb 13 a2 cc 67 70 0a 3c 35 98 04 f9 1b df b8 e3 77 cd 0e c8 0d dc 10 00 00 01 63 41 62 6d 0a 00 ... &gt;,</span>
+<span class="hljs-comment">//        name: 'timestampList' } ],</span>
+<span class="hljs-comment">//   subjectKeyIdentifier: 'c9c25361669d5fab25f426cd0f389aa849ea48a9',</span>
+<span class="hljs-comment">//   authorityKeyIdentifier: '3dd350a5d6a0adeef34a600a65d321d4f8f8d60f',</span>
+<span class="hljs-comment">//   ocspServer: 'http://ocsp.digicert.com',</span>
+<span class="hljs-comment">//   issuingCertificateURL: 'http://cacerts.digicert.com/DigiCertSHA2ExtendedValidationServerCA.crt',</span>
+<span class="hljs-comment">//   isCA: false,</span>
+<span class="hljs-comment">//   maxPathLen: -1,</span>
+<span class="hljs-comment">//   basicConstraintsValid: true,</span>
+<span class="hljs-comment">//   keyUsage: 5,</span>
+<span class="hljs-comment">//   dnsNames: [ 'github.com', 'www.github.com' ],</span>
+<span class="hljs-comment">//   emailAddresses: [],</span>
+<span class="hljs-comment">//   ipAddresses: [],</span>
+<span class="hljs-comment">//   uris: [],</span>
+<span class="hljs-comment">//   publicKey:</span>
+<span class="hljs-comment">//    { oid: '1.2.840.113549.1.1.1',</span>
+<span class="hljs-comment">//      algo: 'rsaEncryption',</span>
+<span class="hljs-comment">//      publicKey: &lt;Buffer 30 82 01 0a 02 82 01 01 00 c6 3c aa f2 3c 97 0c 3a c1 4f 28 ad 72 70 7d d3 ce b9 b5 60 73 a4 74 9b 8a 77 46 fd 7a 98 42 4c c5 30 19 57 9a a9 33 0b e1 ... &gt; },</span>
+<span class="hljs-comment">//   publicKeyRaw: &lt;Buffer 30 82 01 22 30 0d 06 09 2a 86 48 86 f7 0d 01 01 01 05 00 03 82 01 0f 00 30 82 01 0a 02 82 01 01 00 c6 3c aa f2 3c 97 0c 3a c1 4f 28 ad 72 70 7d d3 ce ... &gt; }&gt;</span>
+</code></pre>
+				<h3 id="license">License</h3>
+				<p>@fidm/x509 is licensed under the <a href="https://github.com/fidm/x509/blob/master/LICENSE">MIT</a> license.
+				Copyright &copy; 2018 FIdM.</p>
+			</div>
+		</div>
+		<div class="col-4 col-menu menu-sticky-wrap menu-highlight">
+			<nav class="tsd-navigation primary">
+				<ul>
+					<li class="globals  ">
+						<a href="globals.html"><em>Globals</em></a>
+					</li>
+					<li class=" tsd-kind-external-module">
+						<a href="modules/_common_.html">"common"</a>
+					</li>
+					<li class=" tsd-kind-external-module">
+						<a href="modules/_index_.html">"index"</a>
+					</li>
+					<li class=" tsd-kind-external-module">
+						<a href="modules/_pki_.html">"pki"</a>
+					</li>
+					<li class=" tsd-kind-external-module">
+						<a href="modules/_x509_.html">"x509"</a>
+					</li>
+				</ul>
+			</nav>
+			<nav class="tsd-navigation secondary menu-sticky">
+				<ul class="before-current">
+				</ul>
+			</nav>
+		</div>
+	</div>
+</div>
+<footer class="with-border-bottom">
+	<div class="container">
+		<h2>Legend</h2>
+		<div class="tsd-legend-group">
+			<ul class="tsd-legend">
+				<li class="tsd-kind-module"><span class="tsd-kind-icon">Module</span></li>
+				<li class="tsd-kind-object-literal"><span class="tsd-kind-icon">Object literal</span></li>
+				<li class="tsd-kind-variable"><span class="tsd-kind-icon">Variable</span></li>
+				<li class="tsd-kind-function"><span class="tsd-kind-icon">Function</span></li>
+				<li class="tsd-kind-function tsd-has-type-parameter"><span class="tsd-kind-icon">Function with type parameter</span></li>
+				<li class="tsd-kind-index-signature"><span class="tsd-kind-icon">Index signature</span></li>
+				<li class="tsd-kind-type-alias"><span class="tsd-kind-icon">Type alias</span></li>
+			</ul>
+			<ul class="tsd-legend">
+				<li class="tsd-kind-enum"><span class="tsd-kind-icon">Enumeration</span></li>
+				<li class="tsd-kind-enum-member"><span class="tsd-kind-icon">Enumeration member</span></li>
+				<li class="tsd-kind-property tsd-parent-kind-enum"><span class="tsd-kind-icon">Property</span></li>
+				<li class="tsd-kind-method tsd-parent-kind-enum"><span class="tsd-kind-icon">Method</span></li>
+			</ul>
+			<ul class="tsd-legend">
+				<li class="tsd-kind-interface"><span class="tsd-kind-icon">Interface</span></li>
+				<li class="tsd-kind-interface tsd-has-type-parameter"><span class="tsd-kind-icon">Interface with type parameter</span></li>
+				<li class="tsd-kind-constructor tsd-parent-kind-interface"><span class="tsd-kind-icon">Constructor</span></li>
+				<li class="tsd-kind-property tsd-parent-kind-interface"><span class="tsd-kind-icon">Property</span></li>
+				<li class="tsd-kind-method tsd-parent-kind-interface"><span class="tsd-kind-icon">Method</span></li>
+				<li class="tsd-kind-index-signature tsd-parent-kind-interface"><span class="tsd-kind-icon">Index signature</span></li>
+			</ul>
+			<ul class="tsd-legend">
+				<li class="tsd-kind-class"><span class="tsd-kind-icon">Class</span></li>
+				<li class="tsd-kind-class tsd-has-type-parameter"><span class="tsd-kind-icon">Class with type parameter</span></li>
+				<li class="tsd-kind-constructor tsd-parent-kind-class"><span class="tsd-kind-icon">Constructor</span></li>
+				<li class="tsd-kind-property tsd-parent-kind-class"><span class="tsd-kind-icon">Property</span></li>
+				<li class="tsd-kind-method tsd-parent-kind-class"><span class="tsd-kind-icon">Method</span></li>
+				<li class="tsd-kind-accessor tsd-parent-kind-class"><span class="tsd-kind-icon">Accessor</span></li>
+				<li class="tsd-kind-index-signature tsd-parent-kind-class"><span class="tsd-kind-icon">Index signature</span></li>
+			</ul>
+			<ul class="tsd-legend">
+				<li class="tsd-kind-constructor tsd-parent-kind-class tsd-is-inherited"><span class="tsd-kind-icon">Inherited constructor</span></li>
+				<li class="tsd-kind-property tsd-parent-kind-class tsd-is-inherited"><span class="tsd-kind-icon">Inherited property</span></li>
+				<li class="tsd-kind-method tsd-parent-kind-class tsd-is-inherited"><span class="tsd-kind-icon">Inherited method</span></li>
+				<li class="tsd-kind-accessor tsd-parent-kind-class tsd-is-inherited"><span class="tsd-kind-icon">Inherited accessor</span></li>
+			</ul>
+			<ul class="tsd-legend">
+				<li class="tsd-kind-property tsd-parent-kind-class tsd-is-protected"><span class="tsd-kind-icon">Protected property</span></li>
+				<li class="tsd-kind-method tsd-parent-kind-class tsd-is-protected"><span class="tsd-kind-icon">Protected method</span></li>
+				<li class="tsd-kind-accessor tsd-parent-kind-class tsd-is-protected"><span class="tsd-kind-icon">Protected accessor</span></li>
+			</ul>
+			<ul class="tsd-legend">
+				<li class="tsd-kind-property tsd-parent-kind-class tsd-is-private"><span class="tsd-kind-icon">Private property</span></li>
+				<li class="tsd-kind-method tsd-parent-kind-class tsd-is-private"><span class="tsd-kind-icon">Private method</span></li>
+				<li class="tsd-kind-accessor tsd-parent-kind-class tsd-is-private"><span class="tsd-kind-icon">Private accessor</span></li>
+			</ul>
+			<ul class="tsd-legend">
+				<li class="tsd-kind-property tsd-parent-kind-class tsd-is-static"><span class="tsd-kind-icon">Static property</span></li>
+				<li class="tsd-kind-call-signature tsd-parent-kind-class tsd-is-static"><span class="tsd-kind-icon">Static method</span></li>
+			</ul>
+		</div>
+	</div>
+</footer>
+<div class="container tsd-generator">
+	<p>Generated using <a href="http://typedoc.org/" target="_blank">TypeDoc</a></p>
+</div>
+<div class="overlay"></div>
+<script src="assets/js/main.js"></script>
+<script>if (location.protocol == 'file:') document.write('<script src="assets/js/search.js"><' + '/script>');</script>
+</body>
+</html>

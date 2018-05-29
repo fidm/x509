@@ -5,6 +5,15 @@
 
 import { isIP } from 'net'
 
+/**
+ * Converts IP string into buffer, 4 bytes for IPv4, and 16 bytes for IPv6.
+ * It will return null when IP string invalid.
+ *
+ * ```js
+ * console.log(bytesFromIP('::1')) // <Buffer 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01>
+ * ```
+ * @param ip IP string to convert
+ */
 export function bytesFromIP (ip: string): Buffer | null {
   switch (isIP(ip)) {
   case 4:
@@ -34,8 +43,15 @@ export function bytesFromIP (ip: string): Buffer | null {
   }
 }
 
-// Converts 4-bytes into an IPv4 string representation or 16-bytes into
-// an IPv6 string representation. The bytes must be in network order.
+/**
+ * Converts 4-bytes into an IPv4 string representation or 16-bytes into
+ * an IPv6 string representation. The bytes must be in network order.
+ *
+ * ```js
+ * console.log(bytesToIP(Buffer.from([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]))) // '::1'
+ * ```
+ * @param bytes buffer to convert
+ */
 export function bytesToIP (bytes: Buffer): string {
   switch (bytes.length) {
   case 4:
@@ -86,7 +102,11 @@ export function bytesToIP (bytes: Buffer): string {
 const oids: { [index: string]: string } = Object.create(null)
 const oidReg = /^[0-9.]+$/
 
-// getOID returns oid or ''
+/**
+ * Returns Object Identifier (dot-separated numeric string) that registered by initOID function.
+ * It will return empty string if not exists.
+ * @param nameOrId OID name or OID
+ */
 export function getOID (nameOrId: string): string {
   if (oidReg.test(nameOrId) && oids[nameOrId] !== '') {
     return nameOrId
@@ -94,7 +114,11 @@ export function getOID (nameOrId: string): string {
   return oids[nameOrId] == null ? '' : oids[nameOrId]
 }
 
-// getOIDName return name or oid
+/**
+ * Returns Object Identifier name that registered by initOID function.
+ * It will return the argument nameOrId if not exists.
+ * @param nameOrId OID name or OID
+ */
 export function getOIDName (nameOrId: string): string {
   if (!oidReg.test(nameOrId) && oids[nameOrId] !== '') {
     return nameOrId
@@ -102,13 +126,14 @@ export function getOIDName (nameOrId: string): string {
   return oids[nameOrId] == null ? nameOrId : oids[nameOrId]
 }
 
-// set id to name mapping and name to id mapping
-function initOID (id: string, name: string, unidirection: boolean = false) {
-  oids[id] = name
-
-  if (!unidirection) {
-    oids[name] = id
-  }
+/**
+ * Register OID and name
+ * @param oid Object Identifier
+ * @param name Object Identifier name
+ */
+function initOID (oid: string, name: string) {
+  oids[oid] = name
+  oids[name] = oid
 }
 
 // algorithm OIDs
@@ -201,33 +226,33 @@ initOID('2.5.4.15', 'businessCategory')
 
 // X.509 extension OIDs
 initOID('2.16.840.1.113730.1.1', 'nsCertType')
-initOID('2.5.29.2', 'keyAttributes', true) // obsolete, use .37 or .15
-initOID('2.5.29.4', 'keyUsageRestriction', true) // obsolete, use .37 or .15
-initOID('2.5.29.6', 'subtreesConstraint', true) // obsolete, use .30
-initOID('2.5.29.9', 'subjectDirectoryAttributes', true)
+initOID('2.5.29.2', 'keyAttributes') // obsolete, use .37 or .15
+initOID('2.5.29.4', 'keyUsageRestriction') // obsolete, use .37 or .15
+initOID('2.5.29.6', 'subtreesConstraint') // obsolete, use .30
+initOID('2.5.29.9', 'subjectDirectoryAttributes')
 initOID('2.5.29.14', 'subjectKeyIdentifier')
 initOID('2.5.29.15', 'keyUsage')
-initOID('2.5.29.16', 'privateKeyUsagePeriod', true)
+initOID('2.5.29.16', 'privateKeyUsagePeriod')
 initOID('2.5.29.17', 'subjectAltName')
 initOID('2.5.29.18', 'issuerAltName')
 initOID('2.5.29.19', 'basicConstraints')
-initOID('2.5.29.20', 'cRLNumber', true)
-initOID('2.5.29.21', 'cRLReason', true)
-initOID('2.5.29.22', 'expirationDate', true)
-initOID('2.5.29.23', 'instructionCode', true)
-initOID('2.5.29.24', 'invalidityDate', true)
-initOID('2.5.29.27', 'deltaCRLIndicator', true)
-initOID('2.5.29.28', 'issuingDistributionPoint', true)
-initOID('2.5.29.29', 'certificateIssuer', true)
-initOID('2.5.29.30', 'nameConstraints', true)
+initOID('2.5.29.20', 'cRLNumber')
+initOID('2.5.29.21', 'cRLReason')
+initOID('2.5.29.22', 'expirationDate')
+initOID('2.5.29.23', 'instructionCode')
+initOID('2.5.29.24', 'invalidityDate')
+initOID('2.5.29.27', 'deltaCRLIndicator')
+initOID('2.5.29.28', 'issuingDistributionPoint')
+initOID('2.5.29.29', 'certificateIssuer')
+initOID('2.5.29.30', 'nameConstraints')
 initOID('2.5.29.31', 'cRLDistributionPoints')
 initOID('2.5.29.32', 'certificatePolicies')
-initOID('2.5.29.33', 'policyMappings', true)
+initOID('2.5.29.33', 'policyMappings')
 initOID('2.5.29.35', 'authorityKeyIdentifier')
-initOID('2.5.29.36', 'policyConstraints', true)
+initOID('2.5.29.36', 'policyConstraints')
 initOID('2.5.29.37', 'extKeyUsage')
-initOID('2.5.29.46', 'freshestCRL', true)
-initOID('2.5.29.54', 'inhibitAnyPolicy', true)
+initOID('2.5.29.46', 'freshestCRL')
+initOID('2.5.29.54', 'inhibitAnyPolicy')
 
 // extKeyUsage purposes
 initOID('1.3.6.1.4.1.311.60.2.1.2', 'jurisdictionST')

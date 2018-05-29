@@ -159,6 +159,9 @@ const x509CertificateValidator: Template = {
   }],
 }
 
+/**
+ * Attribute for X.509v3 certificate.
+ */
 export interface Attribute {
   oid: string,
   value: any,
@@ -168,6 +171,9 @@ export interface Attribute {
   extensions?: Extension[]
 }
 
+/**
+ * DistinguishedName for X.509v3 certificate.
+ */
 export class DistinguishedName {
   uniqueId: BitString | null
   attributes: Attribute[]
@@ -251,9 +257,15 @@ export class DistinguishedName {
   }
 }
 
-// Creates an empty X.509v3 certificate.
+/**
+ * X.509v3 Certificate.
+ */
 export class Certificate {
-  // Parse one or more X.509 certificate from PEM format buffer.
+  /**
+   * Parse one or more X.509 certificates from PEM formatted buffer.
+   * If there is no certificate, it will throw error.
+   * @param data PEM formatted buffer
+   */
   static fromPEMs (data: Buffer): Certificate[] {
     const certs = []
     const pems = PEM.parse(data)
@@ -265,7 +277,7 @@ export class Certificate {
         throw new Error('Could not convert certificate from PEM: invalid type')
       }
       if (pem.procType.includes('ENCRYPTED')) {
-        throw new Error('Could not convert certificate from PEM; PEM is encrypted.')
+        throw new Error('Could not convert certificate from PEM: PEM is encrypted.')
       }
 
       const obj = ASN1.fromDER(pem.body)
@@ -277,7 +289,10 @@ export class Certificate {
     return certs
   }
 
-  // Parse an X.509 certificate from PEM format buffer.
+  /**
+   * Parse an X.509 certificate from PEM formatted buffer.
+   * @param data PEM formatted buffer
+   */
   static fromPEM (data: Buffer): Certificate {
     return Certificate.fromPEMs(data)[0]
   }
@@ -309,7 +324,10 @@ export class Certificate {
   readonly publicKeyRaw: Buffer
   readonly tbsCertificate: ASN1
 
-  // Creates an X.509 certificate from an ASN.1 object
+  /**
+   * Creates an X.509 certificate from an ASN.1 object
+   * @param obj an ASN.1 object
+   */
   constructor (obj: ASN1) {
     // validate certificate and capture data
     const captures: Captures = Object.create(null)
@@ -402,8 +420,30 @@ export class Certificate {
     this.tbsCertificate = captures.tbsCertificate
   }
 
-  // Gets an extension by its name or oid.
-  // If extension exists and a key provided, it will return extension[key].
+  /**
+   * Gets an extension by its name or oid.
+   * If extension exists and a key provided, it will return extension[key].
+   * ```js
+   * certificate.getExtension('keyUsage')
+   * certificate.getExtension('2.5.29.15')
+   * // => { id: '2.5.29.15',
+   * //      critical: true,
+   * //      value: <Buffer 03 02 05 a0>,
+   * //      name: 'keyUsage',
+   * //      digitalSignature: true,
+   * //      nonRepudiation: false,
+   * //      keyEncipherment: true,
+   * //      dataEncipherment: false,
+   * //      keyAgreement: false,
+   * //      keyCertSign: false,
+   * //      cRLSign: false,
+   * //      encipherOnly: false,
+   * //      decipherOnly: false }
+   * certificate.getExtension('keyUsage', 'keyCertSign') // => false
+   * ```
+   * @param name extension name or OID
+   * @param key key in extension
+   */
   getExtension (name: string, key: string = ''): any {
     for (const ext of this.extensions) {
       if (name === ext.id || name === ext.name) {
@@ -413,8 +453,11 @@ export class Certificate {
     return null
   }
 
-  // Returns null if a subject certificate is valid, or error if invalid.
-  // Note that it does not check validity time, DNS name, ip or others.
+  /**
+   * Returns null if a subject certificate is valid, or error if invalid.
+   * Note that it does not check validity time, DNS name, ip or others.
+   * @param child subject's Certificate
+   */
   checkSignature (child: Certificate): Error | null {
     // RFC 5280, 4.2.1.9:
     // "If the basic constraints extension is not present in a version 3
@@ -446,14 +489,19 @@ export class Certificate {
     return null
   }
 
-  // Returns true if this certificate's issuer matches the passed
-  // certificate's subject. Note that no signature check is performed.
+  /**
+   * Returns true if this certificate's issuer matches the passed
+   * certificate's subject. Note that no signature check is performed.
+   * @param parent issuer's Certificate
+   */
   isIssuer (parent: Certificate): boolean {
     return this.issuer.getHash().equals(parent.subject.getHash())
   }
 
-  // Verifies the subjectKeyIdentifier extension value for this certificate
-  // against its public key.
+  /**
+   * Verifies the subjectKeyIdentifier extension value for this certificate
+   * against its public key.
+   */
   verifySubjectKeyIdentifier (): boolean {
     const ski = this.publicKey.getFingerprint('sha1', 'PublicKey')
     return ski.toString('hex') === this.subjectKeyIdentifier
