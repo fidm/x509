@@ -11,7 +11,6 @@ const { Certificate, PrivateKey } = require('../src/index')
 const ed25519Cert = Certificate.fromPEM(fs.readFileSync('./test/cert/ed25519-server-cert.pem'))
 const privateKey = PrivateKey.fromPEM(fs.readFileSync('./test/cert/ed25519-server-key.pem'))
 
-privateKey.setPublicKey(ed25519Cert.publicKey)
 const data = Buffer.allocUnsafe(100)
 const signature = privateKey.sign(data, 'sha256')
 console.log(ed25519Cert.publicKey.verify(data, signature, 'sha256')) // true

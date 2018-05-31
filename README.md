@@ -1,11 +1,10 @@
-# [x509](https://github.com/fidm/x509)
+# [@fidm/x509](https://github.com/fidm/x509)
 Pure JavaScript X509 certificate tools for Node.js.
 
 [![NPM version][npm-image]][npm-url]
 [![Build Status][travis-image]][travis-url]
 [![Downloads][downloads-image]][downloads-url]
 
-It support RSA, Ed25519.
 Inspired by https://github.com/digitalbazaar/forge
 
 ## Install
@@ -29,7 +28,6 @@ const { Certificate, PrivateKey } = require('@fidm/x509')
 const ed25519Cert = Certificate.fromPEM(fs.readFileSync('./test/cert/ed25519-server-cert.pem'))
 const privateKey = PrivateKey.fromPEM(fs.readFileSync('./test/cert/ed25519-server-key.pem'))
 
-privateKey.setPublicKey(ed25519Cert.publicKey)
 const data = Buffer.allocUnsafe(100)
 const signature = privateKey.sign(data, 'sha256')
 console.log(ed25519Cert.publicKey.verify(data, signature, 'sha256')) // true

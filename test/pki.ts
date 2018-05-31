@@ -4,7 +4,7 @@
 // **License:** MIT
 
 import fs from 'fs'
-import { strictEqual, ok, throws } from 'assert'
+import { strictEqual, ok } from 'assert'
 import { suite, it } from 'tman'
 import { Certificate, PublicKey, PrivateKey, RSAPrivateKey } from '../src/index'
 
@@ -40,16 +40,12 @@ suite('PKI', function () {
     strictEqual(privateKey.algo, 'Ed25519')
     strictEqual(fullPrivateKey.algo, 'Ed25519')
     strictEqual(publicKey.keyRaw.length, 32)
-    strictEqual(privateKey.keyRaw.length, 32)
+    strictEqual(privateKey.keyRaw.length, 64)
     strictEqual(fullPrivateKey.keyRaw.length, 64)
 
     const data = Buffer.allocUnsafe(100)
     const signature = fullPrivateKey.sign(data, 'sha256')
     ok(publicKey.verify(data, signature, 'sha256'))
-
-    throws(() => privateKey.sign(data, 'sha256'))
-    privateKey.setPublicKey(publicKey)
-    strictEqual(privateKey.keyRaw.length, 64)
     ok(publicKey.verify(data, privateKey.sign(data, 'sha512'), 'sha512'))
   })
 
@@ -57,7 +53,6 @@ suite('PKI', function () {
     const cert = Certificate.fromPEM(fs.readFileSync('./test/cert/ed25519-server-cert.pem'))
     const privateKey = PrivateKey.fromPEM(fs.readFileSync('./test/cert/ed25519-server-key.pem'))
 
-    privateKey.setPublicKey(cert.publicKey)
     strictEqual(cert.publicKey.keyRaw.length, 32)
     strictEqual(privateKey.keyRaw.length, 64)
     strictEqual(privateKey.algo, 'Ed25519')
@@ -69,8 +64,6 @@ suite('PKI', function () {
     const certcli = Certificate.fromPEM(fs.readFileSync('./test/cert/ed25519-client-cert.pem'))
     const privateKeycli = PrivateKey.fromPEM(fs.readFileSync('./test/cert/ed25519-client-key.pem'))
 
-    privateKeycli.setPublicKey(certcli.publicKey)
-    privateKeycli.setPublicKey(certcli.publicKey)
     strictEqual(certcli.publicKey.keyRaw.length, 32)
     strictEqual(privateKeycli.keyRaw.length, 64)
     strictEqual(privateKeycli.algo, 'Ed25519')

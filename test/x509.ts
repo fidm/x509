@@ -84,7 +84,6 @@ suite('X509', function () {
     strictEqual(cert.issuer.commonName, 'Root CA')
     strictEqual(cert.subject.commonName, 'Ed25519')
 
-    privateKey.setPublicKey(cert.publicKey)
     const data = Buffer.allocUnsafe(100)
     const signature = privateKey.sign(data, 'sha256')
     ok(cert.publicKey.verify(data, signature, 'sha256'))

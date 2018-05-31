@@ -380,7 +380,7 @@ export class PrivateKey {
    * PrivateKey.addSigner(getOID('Ed25519'), function (this: PrivateKey, data: Buffer): Buffer {
    *   const key = this.keyRaw
    *   if (key.length !== 64) {
-   *     throw new Error('Invalid signing key, should setPublicKeyRaw before sign.')
+   *     throw new Error('Invalid signing key.')
    *   }
    *   return Buffer.from(ed25519.detached(data, key))
    * })
@@ -427,7 +427,11 @@ export class PrivateKey {
 
     if (EdDSAPrivateKeyOIDs.includes(this.oid)) {
       this._finalKey = this._keyRaw = ASN1.parseDER(this._keyRaw, Class.UNIVERSAL, Tag.OCTETSTRING).bytes
-      if (this.version === 2) {
+      if (this.oid === '1.3.101.112') {
+        const keypair = ed25519.keyPair.fromSeed(this._keyRaw)
+        this._publicKeyRaw = Buffer.from(keypair.publicKey)
+        this._finalKey = Buffer.from(keypair.secretKey)
+      } else if (this.version === 2) {
         for (const val of obj.mustCompound()) {
           if (val.class === Class.CONTEXT_SPECIFIC && val.tag === 1) {
             this._publicKeyRaw = ASN1.parseBitString(val.bytes).buf
@@ -450,21 +454,6 @@ export class PrivateKey {
    */
   get publicKeyRaw (): Buffer | null {
     return this._publicKeyRaw
-  }
-
-  /**
-   * Sets an PublicKey into PrivateKey.
-   * It is used for Ed25519/Ed448. If oid not matched, an error will be thrown.
-   * @param key public key
-   */
-  setPublicKey (key: PublicKey) {
-    if (this.oid !== key.oid) {
-      throw new Error('invalid PublicKey, OID not equal')
-    }
-    this._publicKeyRaw = key.keyRaw
-    if (EdDSAPrivateKeyOIDs.includes(this.oid)) {
-      this._finalKey = Buffer.concat([this._keyRaw, this._publicKeyRaw])
-    }
   }
 
   /**
@@ -710,7 +699,7 @@ PublicKey.addVerifier(getOID('Ed25519'), function (this: PublicKey, data: Buffer
 PrivateKey.addSigner(getOID('Ed25519'), function (this: PrivateKey, data: Buffer): Buffer {
   const key = this.keyRaw
   if (key.length !== 64) {
-    throw new Error('Invalid signing key, should setPublicKeyRaw before sign.')
+    throw new Error('Invalid signing key.')
   }
   return Buffer.from(ed25519.detached(data, key))
 })

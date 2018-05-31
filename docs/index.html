@@ -64,13 +64,12 @@
 	<div class="row">
 		<div class="col-8 col-content">
 			<div class="tsd-panel tsd-typography">
-				<h1 id="x509"><a href="https://github.com/fidm/x509">x509</a></h1>
+				<h1 id="-fidm-x509"><a href="https://github.com/fidm/x509">@fidm/x509</a></h1>
 				<p>Pure JavaScript X509 certificate tools for Node.js.</p>
 				<p><a href="https://www.npmjs.com/package/@fidm/x509"><img src="https://img.shields.io/npm/v/@fidm/x509.svg" alt="NPM version"></a>
 					<a href="https://travis-ci.org/fidm/x509"><img src="http://img.shields.io/travis/fidm/x509.svg" alt="Build Status"></a>
 				<a href="https://npmjs.org/package/@fidm/x509"><img src="https://img.shields.io/npm/dm/@fidm/x509.svg?style=flat-square" alt="Downloads"></a></p>
-				<p>It support RSA, Ed25519.
-				Inspired by <a href="https://github.com/digitalbazaar/forge">https://github.com/digitalbazaar/forge</a></p>
+				<p>Inspired by <a href="https://github.com/digitalbazaar/forge">https://github.com/digitalbazaar/forge</a></p>
 				<h2 id="install">Install</h2>
 				<pre><code><span class="hljs-built_in">npm</span> i --save @fidm/x509
 </code></pre><h2 id="documentation">Documentation</h2>
@@ -84,7 +83,6 @@
 <span class="hljs-keyword">const</span> ed25519Cert = Certificate.fromPEM(fs.readFileSync(<span class="hljs-string">'./test/cert/ed25519-server-cert.pem'</span>))
 <span class="hljs-keyword">const</span> privateKey = PrivateKey.fromPEM(fs.readFileSync(<span class="hljs-string">'./test/cert/ed25519-server-key.pem'</span>))
 
-privateKey.setPublicKey(ed25519Cert.publicKey)
 <span class="hljs-keyword">const</span> data = Buffer.allocUnsafe(<span class="hljs-number">100</span>)
 <span class="hljs-keyword">const</span> signature = privateKey.sign(data, <span class="hljs-string">'sha256'</span>)
 <span class="hljs-built_in">console</span>.log(ed25519Cert.publicKey.verify(data, signature, <span class="hljs-string">'sha256'</span>)) <span class="hljs-comment">// true</span>
