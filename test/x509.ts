@@ -6,11 +6,16 @@
 import fs from 'fs'
 import { strictEqual, deepEqual, ok } from 'assert'
 import { suite, it } from 'tman'
+import { PEM } from '@fidm/asn1'
 import { Certificate, RSAPublicKey, PrivateKey } from '../src/index'
 
 suite('X509', function () {
   it('should work for github certificate', function () {
-    const cert = Certificate.fromPEM(fs.readFileSync('./test/cert/github.crt'))
+    const file = fs.readFileSync('./test/cert/github.crt')
+    const pems = PEM.parse(file)
+    const cert = Certificate.fromPEM(file)
+
+    ok(pems[0].body.equals(cert.raw))
     strictEqual(cert.version, 3)
     strictEqual(cert.serialNumber, '0a0630427f5bbced6957396593b6451f')
     strictEqual(cert.signatureAlgorithm, 'sha256WithRsaEncryption')

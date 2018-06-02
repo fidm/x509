@@ -297,6 +297,7 @@ export class Certificate {
     return Certificate.fromPEMs(data)[0]
   }
 
+  readonly raw: Buffer
   readonly version: number
   readonly serialNumber: string
   readonly signatureOID: string
@@ -336,6 +337,7 @@ export class Certificate {
       throw new Error('Cannot read X.509 certificate: ' + err.message)
     }
 
+    this.raw = obj.DER
     this.version = captures.certVersion == null ? 0 : (ASN1.parseIntegerNum(captures.certVersion.bytes) + 1)
     this.serialNumber = ASN1.parseIntegerStr(captures.certSerialNumber.bytes)
     this.signatureOID = ASN1.parseOID(captures.certSignatureOID.bytes)

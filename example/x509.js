@@ -22,7 +22,8 @@ console.log(issuer.verifySubjectKeyIdentifier()) // true
 console.log(cert.verifySubjectKeyIdentifier()) // true
 console.log(issuer.checkSignature(cert)) // null
 console.log(issuer)
-// <Certificate { version: 3,
+// <Certificate { raw: <Buffer 30 82 04 b6 30 82 03 9e a0 03 02 01 02 02 10 0c 79 a9 44 b0 8c 11 95 20 92 61 5f e2 6b 1d 83 30 0d 06 09 2a 86 48 86 f7 0d 01 01 0b 05 00 30 6c 31 0b ... >,
+//   version: 3,
 //   serialNumber: '0c79a944b08c11952092615fe26b1d83',
 //   signatureOID: '1.2.840.113549.1.1.11',
 //   signatureAlgorithm: 'sha256WithRsaEncryption',
@@ -154,7 +155,8 @@ console.log(issuer)
 //   publicKeyRaw: <Buffer 30 82 01 22 30 0d 06 09 2a 86 48 86 f7 0d 01 01 01 05 00 03 82 01 0f 00 30 82 01 0a 02 82 01 01 00 d7 53 a4 04 51 f8 99 a6 16 48 4b 67 27 aa 93 49 d0 ... > }>
 
 console.log(cert)
-// <Certificate { version: 3,
+// <Certificate { raw: <Buffer 30 82 07 42 30 82 06 2a a0 03 02 01 02 02 10 0a 06 30 42 7f 5b bc ed 69 57 39 65 93 b6 45 1f 30 0d 06 09 2a 86 48 86 f7 0d 01 01 0b 05 00 30 75 31 0b ... >,
+//   version: 3,
 //   serialNumber: '0a0630427f5bbced6957396593b6451f',
 //   signatureOID: '1.2.840.113549.1.1.11',
 //   signatureAlgorithm: 'sha256WithRsaEncryption',
