@@ -428,7 +428,7 @@ export class Certificate {
    * ```js
    * certificate.getExtension('keyUsage')
    * certificate.getExtension('2.5.29.15')
-   * // => { id: '2.5.29.15',
+   * // => { oid: '2.5.29.15',
    * //      critical: true,
    * //      value: <Buffer 03 02 05 a0>,
    * //      name: 'keyUsage',
@@ -448,7 +448,7 @@ export class Certificate {
    */
   getExtension (name: string, key: string = ''): any {
     for (const ext of this.extensions) {
-      if (name === ext.id || name === ext.name) {
+      if (name === ext.oid || name === ext.name) {
         return key === '' ? ext : ext[key]
       }
     }
@@ -530,7 +530,7 @@ export class Certificate {
 }
 
 export interface Extension {
-  id: string
+  oid: string
   critical: boolean
   value: Buffer
   name: string
@@ -555,7 +555,7 @@ function certificateExtensionFromAsn1 (ext: ASN1): Extension {
   // [1] critical    BOOLEAN DEFAULT FALSE
   // [2] extnValue   OCTET STRING
   const e = {} as Extension
-  e.id = ASN1.parseOID(ext.value[0].bytes)
+  e.oid = ASN1.parseOID(ext.value[0].bytes)
   e.critical = false
 
   if (ext.value[1].tag === Tag.BOOLEAN) {
@@ -566,7 +566,7 @@ function certificateExtensionFromAsn1 (ext: ASN1): Extension {
   }
 
   // if the oid is known, get its name
-  e.name = getOIDName(e.id)
+  e.name = getOIDName(e.oid)
   switch (e.name) {
     // handle key usage
   case 'keyUsage':

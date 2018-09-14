@@ -138,4 +138,20 @@ suite('X509', function () {
     const signature = privateKey.sign(data, 'sha256')
     ok(cert.publicKey.verify(data, signature, 'sha256'))
   })
+
+  // it.skip('should support Mozilla\'s publicly trusted list of CAs', function () {
+  //   const certs = Certificate.fromPEMs(fs.readFileSync('./test/cert/mozilla-publicly-certs.pem'))
+  //   for (const cert of certs) {
+  //     console.log(cert.issuer.commonName)
+  //     console.log(cert.subject.commonName)
+  //     console.log(cert.serialNumber)
+  //     console.log(cert.authorityKeyIdentifier)
+  //     console.log(cert.subjectKeyIdentifier)
+  //     console.log(cert.publicKey.getFingerprint('sha1').toString('hex'))
+  //     console.log(cert.publicKey.getFingerprint('sha256').toString('hex'))
+  //     console.log(cert.publicKey.getFingerprint('sha256', 'PublicKeyInfo').toString('hex'))
+  //     console.log('\n\n')
+  //   }
+  //   console.log(certs.length)
+  // })
 })
