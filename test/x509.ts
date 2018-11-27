@@ -140,7 +140,12 @@ suite('X509', function () {
   })
 
   it('should support CSRs', function () {
-    const csr = CertificateSigningRequest.fromPEM(fs.readFileSync('./test/cert/test.csr'))
+    const csr = CertificateSigningRequest.fromPEM(fs.readFileSync('./test/cert/csr1.pem'))
+    strictEqual(csr.extensions.length, 0)
+  })
+
+  it('should support CSRs with extensions', function () {
+    const csr = CertificateSigningRequest.fromPEM(fs.readFileSync('./test/cert/csr2.pem'))
     strictEqual(csr.getExtension("keyUsage").digitalSignature, true)
     strictEqual(csr.extensions.length, 3)
   })

@@ -507,6 +507,7 @@ export abstract class X509 {
       obj[key] = toJSONify((this as any)[key])
     }
     delete obj.tbsCertificate
+    delete obj.captures
     return obj
   }
 
