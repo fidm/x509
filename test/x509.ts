@@ -7,7 +7,7 @@ import fs from 'fs'
 import { strictEqual, deepEqual, ok } from 'assert'
 import { suite, it } from 'tman'
 import { PEM } from '@fidm/asn1'
-import { Certificate, RSAPublicKey, PrivateKey } from '../src/index'
+import { Certificate, CertificateSigningRequest, RSAPublicKey, PrivateKey } from '../src/index'
 
 suite('X509', function () {
   it('should work for github certificate', function () {
@@ -137,6 +137,12 @@ suite('X509', function () {
     const data = Buffer.allocUnsafe(100)
     const signature = privateKey.sign(data, 'sha256')
     ok(cert.publicKey.verify(data, signature, 'sha256'))
+  })
+
+  it('should support CSRs', function () {
+    const csr = CertificateSigningRequest.fromPEM(fs.readFileSync('./test/cert/test.csr'))
+    strictEqual(csr.getExtension("keyUsage").digitalSignature, true)
+    strictEqual(csr.extensions.length, 3)
   })
 
   // it.skip('should support Mozilla\'s publicly trusted list of CAs', function () {
