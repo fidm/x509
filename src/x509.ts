@@ -158,6 +158,103 @@ const x509CertificateValidator: Template = {
     capture: 'certSignature',
   }],
 }
+// validator for a x509 CSR
+const x509CertificateSigningRequestValidator = {
+  name: 'CertificateSigningRequest',
+  class: Class.UNIVERSAL,
+  tag: Tag.SEQUENCE,
+  value: [{
+          name: 'Certificate.TBSCertificate',
+          class: Class.UNIVERSAL,
+          tag: Tag.SEQUENCE,
+          capture: 'tbsCertificate',
+          value: [{
+                  name: 'Certificate.TBSCertificate.version',
+                  class: Class.CONTEXT_SPECIFIC,
+                  tag: Tag.NONE,
+                  optional: true,
+                  value: [{
+                          name: 'Certificate.TBSCertificate.version.integer',
+                          class: Class.UNIVERSAL,
+                          tag: Tag.INTEGER,
+                          capture: 'certVersion',
+                      }],
+              }, {
+                  name: 'Certificate.TBSCertificate.serialNumber',
+                  class: Class.UNIVERSAL,
+                  tag: Tag.INTEGER,
+                  capture: 'certSerialNumber',
+              }, {
+                  name: 'Certificate.TBSCertificate.issuer',
+                  class: Class.UNIVERSAL,
+                  tag: Tag.SEQUENCE,
+                  capture: 'certIssuer',
+              }, {
+                  // Name (subject) (RDNSequence)
+                  name: 'Certificate.TBSCertificate.subject',
+                  class: Class.UNIVERSAL,
+                  tag: Tag.SEQUENCE,
+                  capture: 'certSubject',
+              }, {
+                  // subjectUniqueID (optional)
+                  name: 'Certificate.TBSCertificate.subjectUniqueID',
+                  class: Class.CONTEXT_SPECIFIC,
+                  tag: Tag.INTEGER,
+                  optional: true,
+                  value: [{
+                          name: 'Certificate.TBSCertificate.subjectUniqueID.id',
+                          class: Class.UNIVERSAL,
+                          tag: Tag.BITSTRING,
+                          capture: 'certSubjectUniqueId',
+                      }],
+              }, {
+                  // Extensions (optional)
+                  name: 'Certificate.TBSCertificate.extensionRequest',
+                  class: Class.CONTEXT_SPECIFIC,
+                  tag: Tag.NONE,
+                  value: [{
+                    name: 'Certificate.TBSCertificate.extensionRequest',
+                    class: Class.UNIVERSAL,
+                    tag: Tag.SEQUENCE,
+                    value: [{
+                      name: 'Certificate.TBSCertificate.extensionRequestt',
+                      class: Class.UNIVERSAL,
+                      tag: Tag.OID,
+                    },
+                    {
+                      name: 'Certificate.TBSCertificate.extensionRequest',
+                      class: Class.UNIVERSAL,
+                      tag: Tag.SET,
+                      capture: 'certExtensions',
+                    }],
+                  }],
+                  optional: true,
+              }],
+      }, {
+          // AlgorithmIdentifier (signature algorithm)
+          name: 'Certificate.signatureAlgorithm',
+          class: Class.UNIVERSAL,
+          tag: Tag.SEQUENCE,
+          value: [{
+                  // algorithm
+                  name: 'Certificate.signatureAlgorithm.algorithm',
+                  class: Class.UNIVERSAL,
+                  tag: Tag.OID,
+                  capture: 'certSignatureOID',
+              }, {
+                  name: 'Certificate.TBSCertificate.signature.parameters',
+                  class: Class.UNIVERSAL,
+                  tag: Tag.OCTETSTRING,
+                  optional: true,
+                  capture: 'certSignatureParams',
+              }],
+      }, {
+          name: 'Certificate.signatureValue',
+          class: Class.UNIVERSAL,
+          tag: Tag.BITSTRING,
+          capture: 'certSignature',
+      }],
+};
 
 /**
  * Attribute for X.509v3 certificate.
@@ -257,10 +354,175 @@ export class DistinguishedName {
   }
 }
 
+export abstract class X509 {
+  readonly captures: Captures
+  readonly raw: Buffer
+  readonly version: number
+  readonly serialNumber: string
+  readonly signatureOID: string
+  readonly signatureAlgorithm: string
+  readonly signature: Buffer
+  readonly subjectKeyIdentifier: string
+  readonly ocspServer: string
+  readonly issuingCertificateURL: string
+  readonly isCA: boolean
+  readonly maxPathLen: number
+  readonly basicConstraintsValid: boolean
+  readonly keyUsage: number
+  readonly dnsNames: string[]
+  readonly emailAddresses: string[]
+  readonly ipAddresses: string[]
+  readonly uris: string[]
+  readonly issuer: DistinguishedName
+  readonly extensions: Extension[]
+  readonly tbsCertificate: ASN1
+  readonly subject: DistinguishedName
+
+  constructor (validator: Template, obj: ASN1) {
+    this.captures = Object.create(null) as Captures
+    // validate certificate and capture data
+    const err = obj.validate(validator, this.captures)
+    if (err != null) {
+      throw new Error('Cannot read X.509 certificate: ' + err.message)
+    }
+
+    this.raw = obj.DER
+    this.version = this.captures.certVersion == null ? 0 : (ASN1.parseIntegerNum(this.captures.certVersion.bytes) + 1)
+    this.serialNumber = ASN1.parseIntegerStr(this.captures.certSerialNumber.bytes)
+    this.signatureOID = ASN1.parseOID(this.captures.certSignatureOID.bytes)
+    this.signatureAlgorithm = getOIDName(this.signatureOID)
+
+    this.signature = ASN1.parseBitString(this.captures.certSignature.bytes).buf
+
+    this.issuer = new DistinguishedName()
+    this.issuer.setAttrs(RDNAttributesAsArray(this.captures.certIssuer))
+    if (this.captures.certIssuerUniqueId != null) {
+      this.issuer.uniqueId = ASN1.parseBitString(this.captures.certIssuerUniqueId.bytes)
+    }
+
+    this.extensions = []
+    this.subjectKeyIdentifier = ''
+    this.ocspServer = ''
+    this.issuingCertificateURL = ''
+    this.isCA = false
+    this.maxPathLen = -1
+    this.basicConstraintsValid = false
+    this.keyUsage = 0
+    this.dnsNames = []
+    this.emailAddresses = []
+    this.ipAddresses = []
+    this.uris = []
+    if (this.captures.certExtensions != null) {
+      this.extensions = certificateExtensionsFromAsn1(this.captures.certExtensions)
+      for (const ext of this.extensions) {
+        if (typeof ext.subjectKeyIdentifier === 'string') {
+          this.subjectKeyIdentifier = ext.subjectKeyIdentifier
+        }
+        if (typeof ext.authorityInfoAccessOcsp === 'string') {
+          this.ocspServer = ext.authorityInfoAccessOcsp
+        }
+        if (typeof ext.authorityInfoAccessIssuers === 'string') {
+          this.issuingCertificateURL = ext.authorityInfoAccessIssuers
+        }
+        if (typeof ext.basicConstraintsValid === 'boolean') {
+          this.isCA = ext.isCA
+          this.maxPathLen = ext.maxPathLen
+          this.basicConstraintsValid = ext.basicConstraintsValid
+        }
+        if (typeof ext.keyUsage === 'number') {
+          this.keyUsage = ext.keyUsage
+        }
+
+        if (Array.isArray(ext.altNames)) {
+          for (const item of ext.altNames) {
+            if (item.dnsName != null) {
+              this.dnsNames.push(item.dnsName)
+            }
+            if (item.email != null) {
+              this.emailAddresses.push(item.email)
+            }
+            if (item.ip != null) {
+              this.ipAddresses.push(item.ip)
+            }
+            if (item.uri != null) {
+              this.uris.push(item.uri)
+            }
+          }
+        }
+      }
+    }
+
+    this.subject = new DistinguishedName()
+    try {
+      this.subject.setAttrs(RDNAttributesAsArray(this.captures.certSubject))
+      if (this.captures.certSubjectUniqueId != null) {
+        this.subject.uniqueId = ASN1.parseBitString(this.captures.certSubjectUniqueId.bytes)
+      }
+    } catch (e) {
+      console.debug("Could not read cert subject: " + e.message);
+    }
+
+    this.tbsCertificate = this.captures.tbsCertificate
+  }
+
+  /**
+   * Gets an extension by its name or oid.
+   * If extension exists and a key provided, it will return extension[key].
+   * ```js
+   * certificate.getExtension('keyUsage')
+   * certificate.getExtension('2.5.29.15')
+   * // => { oid: '2.5.29.15',
+   * //      critical: true,
+   * //      value: <Buffer 03 02 05 a0>,
+   * //      name: 'keyUsage',
+   * //      digitalSignature: true,
+   * //      nonRepudiation: false,
+   * //      keyEncipherment: true,
+   * //      dataEncipherment: false,
+   * //      keyAgreement: false,
+   * //      keyCertSign: false,
+   * //      cRLSign: false,
+   * //      encipherOnly: false,
+   * //      decipherOnly: false }
+   * certificate.getExtension('keyUsage', 'keyCertSign') // => false
+   * ```
+   * @param name extension name or OID
+   * @param key key in extension
+   */
+  getExtension (name: string, key: string = ''): any {
+    for (const ext of this.extensions) {
+      if (name === ext.oid || name === ext.name) {
+        return key === '' ? ext : ext[key]
+      }
+    }
+    return null
+  }
+
+  /**
+   * Return a friendly JSON object for debuging.
+   */
+  toJSON (): any {
+    const obj = {} as any
+    for (const key of Object.keys(this)) {
+      obj[key] = toJSONify((this as any)[key])
+    }
+    delete obj.tbsCertificate
+    delete obj.captures
+    return obj
+  }
+
+  protected [inspect.custom] (_depth: any, options: any): string {
+    if (options.depth <= 2) {
+      options.depth = 10
+    }
+    return `<${this.constructor.name} ${inspect(this.toJSON(), options)}>`
+  }
+}
+
 /**
  * X.509v3 Certificate.
  */
-export class Certificate {
+export class Certificate extends X509 {
   /**
    * Parse one or more X.509 certificates from PEM formatted buffer.
    * If there is no certificate, it will throw error.
@@ -297,162 +559,35 @@ export class Certificate {
     return Certificate.fromPEMs(data)[0]
   }
 
-  readonly raw: Buffer
-  readonly version: number
-  readonly serialNumber: string
-  readonly signatureOID: string
-  readonly signatureAlgorithm: string
   readonly infoSignatureOID: string
-  readonly signature: Buffer
-  readonly subjectKeyIdentifier: string
   readonly authorityKeyIdentifier: string
-  readonly ocspServer: string
-  readonly issuingCertificateURL: string
-  readonly isCA: boolean
-  readonly maxPathLen: number
-  readonly basicConstraintsValid: boolean
-  readonly keyUsage: number
-  readonly dnsNames: string[]
-  readonly emailAddresses: string[]
-  readonly ipAddresses: string[]
-  readonly uris: string[]
   readonly validFrom: Date
   readonly validTo: Date
-  readonly issuer: DistinguishedName
-  readonly subject: DistinguishedName
-  readonly extensions: Extension[]
   readonly publicKey: PublicKey
   readonly publicKeyRaw: Buffer
-  readonly tbsCertificate: ASN1
 
   /**
    * Creates an X.509 certificate from an ASN.1 object
    * @param obj an ASN.1 object
    */
   constructor (obj: ASN1) {
-    // validate certificate and capture data
-    const captures: Captures = Object.create(null)
-    const err = obj.validate(x509CertificateValidator, captures)
-    if (err != null) {
-      throw new Error('Cannot read X.509 certificate: ' + err.message)
-    }
+    super(x509CertificateValidator, obj);
 
-    this.raw = obj.DER
-    this.version = captures.certVersion == null ? 0 : (ASN1.parseIntegerNum(captures.certVersion.bytes) + 1)
-    this.serialNumber = ASN1.parseIntegerStr(captures.certSerialNumber.bytes)
-    this.signatureOID = ASN1.parseOID(captures.certSignatureOID.bytes)
-    this.signatureAlgorithm = getOIDName(this.signatureOID)
+    this.infoSignatureOID = ASN1.parseOID(this.captures.certinfoSignatureOID.bytes)
 
-    this.infoSignatureOID = ASN1.parseOID(captures.certinfoSignatureOID.bytes)
-    this.signature = ASN1.parseBitString(captures.certSignature.bytes).buf
-
-    this.validFrom = ASN1.parseTime(captures.certValidityNotBefore.tag, captures.certValidityNotBefore.bytes)
-    this.validTo = ASN1.parseTime(captures.certValidityNotAfter.tag, captures.certValidityNotAfter.bytes)
-
-    this.issuer = new DistinguishedName()
-    this.issuer.setAttrs(RDNAttributesAsArray(captures.certIssuer))
-    if (captures.certIssuerUniqueId != null) {
-      this.issuer.uniqueId = ASN1.parseBitString(captures.certIssuerUniqueId.bytes)
-    }
-
-    this.subject = new DistinguishedName()
-    this.subject.setAttrs(RDNAttributesAsArray(captures.certSubject))
-    if (captures.certSubjectUniqueId != null) {
-      this.subject.uniqueId = ASN1.parseBitString(captures.certSubjectUniqueId.bytes)
-    }
-
-    this.extensions = []
-    this.subjectKeyIdentifier = ''
     this.authorityKeyIdentifier = ''
-    this.ocspServer = ''
-    this.issuingCertificateURL = ''
-    this.isCA = false
-    this.maxPathLen = -1
-    this.basicConstraintsValid = false
-    this.keyUsage = 0
-    this.dnsNames = []
-    this.emailAddresses = []
-    this.ipAddresses = []
-    this.uris = []
-    if (captures.certExtensions != null) {
-      this.extensions = certificateExtensionsFromAsn1(captures.certExtensions)
-      for (const ext of this.extensions) {
-        if (typeof ext.subjectKeyIdentifier === 'string') {
-          this.subjectKeyIdentifier = ext.subjectKeyIdentifier
-        }
-        if (typeof ext.authorityKeyIdentifier === 'string') {
-          this.authorityKeyIdentifier = ext.authorityKeyIdentifier
-        }
-        if (typeof ext.authorityInfoAccessOcsp === 'string') {
-          this.ocspServer = ext.authorityInfoAccessOcsp
-        }
-        if (typeof ext.authorityInfoAccessIssuers === 'string') {
-          this.issuingCertificateURL = ext.authorityInfoAccessIssuers
-        }
-        if (typeof ext.basicConstraintsValid === 'boolean') {
-          this.isCA = ext.isCA
-          this.maxPathLen = ext.maxPathLen
-          this.basicConstraintsValid = ext.basicConstraintsValid
-        }
-        if (typeof ext.keyUsage === 'number') {
-          this.keyUsage = ext.keyUsage
-        }
 
-        if (Array.isArray(ext.altNames)) {
-          for (const item of ext.altNames) {
-            if (item.dnsName != null) {
-              this.dnsNames.push(item.dnsName)
-            }
-            if (item.email != null) {
-              this.emailAddresses.push(item.email)
-            }
-            if (item.ip != null) {
-              this.ipAddresses.push(item.ip)
-            }
-            if (item.uri != null) {
-              this.uris.push(item.uri)
-            }
-          }
-        }
-      }
-    }
+    this.validFrom = ASN1.parseTime(this.captures.certValidityNotBefore.tag, this.captures.certValidityNotBefore.bytes)
+    this.validTo = ASN1.parseTime(this.captures.certValidityNotAfter.tag, this.captures.certValidityNotAfter.bytes)
 
-    this.publicKey = new PublicKey(captures.publicKeyInfo)
-    this.publicKeyRaw = this.publicKey.toDER()
-    this.tbsCertificate = captures.tbsCertificate
-  }
-
-  /**
-   * Gets an extension by its name or oid.
-   * If extension exists and a key provided, it will return extension[key].
-   * ```js
-   * certificate.getExtension('keyUsage')
-   * certificate.getExtension('2.5.29.15')
-   * // => { oid: '2.5.29.15',
-   * //      critical: true,
-   * //      value: <Buffer 03 02 05 a0>,
-   * //      name: 'keyUsage',
-   * //      digitalSignature: true,
-   * //      nonRepudiation: false,
-   * //      keyEncipherment: true,
-   * //      dataEncipherment: false,
-   * //      keyAgreement: false,
-   * //      keyCertSign: false,
-   * //      cRLSign: false,
-   * //      encipherOnly: false,
-   * //      decipherOnly: false }
-   * certificate.getExtension('keyUsage', 'keyCertSign') // => false
-   * ```
-   * @param name extension name or OID
-   * @param key key in extension
-   */
-  getExtension (name: string, key: string = ''): any {
     for (const ext of this.extensions) {
-      if (name === ext.oid || name === ext.name) {
-        return key === '' ? ext : ext[key]
+      if (typeof ext.authorityKeyIdentifier === 'string') {
+        this.authorityKeyIdentifier = ext.authorityKeyIdentifier
       }
     }
-    return null
+
+    this.publicKey = new PublicKey(this.captures.publicKeyInfo)
+    this.publicKeyRaw = this.publicKey.toDER()
   }
 
   /**
@@ -508,24 +643,48 @@ export class Certificate {
     const ski = this.publicKey.getFingerprint('sha1', 'PublicKey')
     return ski.toString('hex') === this.subjectKeyIdentifier
   }
+}
 
+/**
+ * X.509v3 Certificate.
+ */
+export class CertificateSigningRequest extends X509 {
   /**
-   * Return a friendly JSON object for debuging.
+   * Parse one or more X.509 certificates from PEM formatted buffer.
+   * If there is no certificate, it will throw error.
+   * @param data PEM formatted buffer
    */
-  toJSON (): any {
-    const obj = {} as any
-    for (const key of Object.keys(this)) {
-      obj[key] = toJSONify((this as any)[key])
+  static fromPEMs (data: Buffer): CertificateSigningRequest[] {
+    const certRequests = []
+    const pems = PEM.parse(data)
+
+    for (const pem of pems) {
+      if (pem.type !== 'CERTIFICATE REQUEST') {
+        throw new Error('Could not convert certificate signing request from PEM: invalid type')
+      }
+
+      const obj = ASN1.fromDER(pem.body)
+      certRequests.push(new CertificateSigningRequest(obj))
     }
-    delete obj.tbsCertificate
-    return obj
+    if (certRequests.length === 0) {
+      throw new Error('No Certificate request')
+    }
+    return certRequests
   }
 
-  protected [inspect.custom] (_depth: any, options: any): string {
-    if (options.depth <= 2) {
-      options.depth = 10
-    }
-    return `<${this.constructor.name} ${inspect(this.toJSON(), options)}>`
+  /**
+   * Parse an X.509 certificate signing request from PEM formatted buffer.
+   * @param data PEM formatted buffer
+   */
+  static fromPEM (data: Buffer): CertificateSigningRequest {
+    return CertificateSigningRequest.fromPEMs(data)[0]
+  }
+  /**
+   * Creates an X.509 certificate signing from an ASN.1 object
+   * @param obj an ASN.1 object
+   */
+  constructor (obj: ASN1) {
+    super(x509CertificateSigningRequestValidator, obj);
   }
 }
 
