@@ -226,7 +226,7 @@ const x509CertificateSigningRequestValidator = {
                       class: Class.UNIVERSAL,
                       tag: Tag.SET,
                       capture: 'certExtensions',
-                    }]
+                    }],
                   }],
                   optional: true,
               }],
@@ -378,7 +378,7 @@ export abstract class X509 {
   readonly tbsCertificate: ASN1
   readonly subject: DistinguishedName
 
-  constructor(validator: Template, obj: ASN1) {
+  constructor (validator: Template, obj: ASN1) {
     this.captures = Object.create(null) as Captures
     // validate certificate and capture data
     const err = obj.validate(validator, this.captures)
