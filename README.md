@@ -376,7 +376,7 @@ console.log(issuer)
 
 ### License
 @fidm/x509 is licensed under the [MIT](https://github.com/fidm/x509/blob/master/LICENSE) license.
-Copyright &copy; 2018 FIdM.
+Copyright &copy; 2018-2019 FIdM.
 
 [npm-url]: https://www.npmjs.com/package/@fidm/x509
 [npm-image]: https://img.shields.io/npm/v/@fidm/x509.svg

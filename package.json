@@ -4,7 +4,7 @@
   "authors": [
     "Yan Qing <admin@zensh.com>"
   ],
-  "version": "1.2.0",
+  "version": "1.2.1",
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "license": "MIT",
@@ -28,18 +28,18 @@
     "node"
   ],
   "dependencies": {
-    "@fidm/asn1": "^1.0.3",
-    "tweetnacl": "^1.0.0"
+    "@fidm/asn1": "^1.0.4",
+    "tweetnacl": "^1.0.1"
   },
   "devDependencies": {
-    "@types/node": "^10.9.4",
+    "@types/node": "^11.10.4",
     "istanbul": "^1.1.0-alpha.1",
-    "tman": "^1.8.0",
-    "ts-node": "^7.0.1",
-    "tslint": "^5.11.0",
+    "tman": "^1.9.0",
+    "ts-node": "^8.0.2",
+    "tslint": "^5.13.1",
     "tslint-eslint-rules": "^5.4.0",
-    "typedoc": "^0.12.0",
-    "typescript": "^3.0.3"
+    "typedoc": "^0.14.2",
+    "typescript": "^3.3.3333"
   },
   "scripts": {
     "build": "rm -rf build && tsc",
