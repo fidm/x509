@@ -1,4 +1,5 @@
 # [@fidm/x509](https://github.com/fidm/x509)
+
 Pure JavaScript X509 certificate tools for Node.js.
 
 [![NPM version][npm-image]][npm-url]
@@ -20,6 +21,7 @@ https://fidm.github.io/x509/
 ## Example
 
 ### Support ed25519 certificate
+
 ```js
 const fs = require('fs')
 
@@ -34,6 +36,7 @@ console.log(ed25519Cert.publicKey.verify(data, signature, 'sha256')) // true
 ```
 
 ### Parse githu.com' certificate
+
 ```js
 const fs = require('fs')
 const { Certificate } = require('@fidm/x509')
@@ -374,7 +377,30 @@ console.log(issuer)
 //    <Buffer 30 82 01 22 30 0d 06 09 2a 86 48 86 f7 0d 01 01 01 05 00 03 82 01 0f 00 30 82 01 0a 02 82 01 01 00 c6 3c aa f2 3c 97 0c 3a c1 4f 28 ad 72 70 7d d3 ce ... > }>
 ```
 
+### Fingerprints
+
+This is how you calculate the SHA-1 fingerprint of a certificate:
+
+```js
+const crypto = require('crypto');
+const { Certificate } = require('@fidm/x509')
+
+const ed25519Cert = Certificate.fromPEM(fs.readFileSync('./test/cert/ed25519-server-cert.pem'))
+
+const shasum = crypto.createHash('sha1');
+shasum.update(parsed.raw);
+console.log(shasum.digest('hex')); // bd667307af5a0f203e37635ff8d29d96f2f3ad7c
+```
+
+Yields the same results as:
+
+```shell
+$ openssl x509 -noout -fingerprint -sha1 -inform pem -in ./test/cert/ed25519-server-cert.pem
+SHA1 Fingerprint=BD:66:73:07:AF:5A:0F:20:3E:37:63:5F:F8:D2:9D:96:F2:F3:AD:7C
+```
+
 ### License
+
 @fidm/x509 is licensed under the [MIT](https://github.com/fidm/x509/blob/master/LICENSE) license.
 Copyright &copy; 2018-2019 FIdM.
 
