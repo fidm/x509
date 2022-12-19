@@ -258,8 +258,12 @@ export class PublicKey {
   verify (data: Buffer, signature: Buffer, hashAlgorithm: string): boolean {
     const verifier = PublicKey._verifiers[this.oid]
     if (verifier != null) {
-      const sum = createHash(hashAlgorithm).update(data).digest()
-      return verifier.call(this, sum, signature)
+      if (hashAlgorithm === 'none') {
+        return verifier.call(this, data, signature); // Ed25519 does not use a hash function! Just use the data as input!
+      } else {
+        const sum = createHash(hashAlgorithm).update(data).digest()
+        return verifier.call(this, sum, signature)
+      }
     }
 
     const verify = createVerify(hashAlgorithm)

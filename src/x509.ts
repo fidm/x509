@@ -863,6 +863,8 @@ function getHashAgl (oid: string): string {
     return'sha1'
   case 'dsaWithSha256':
     return'sha256'
+  case 'Ed25519':
+    return'none'
   default:
     return ''
   }

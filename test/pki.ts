@@ -31,7 +31,7 @@ suite('PKI', function () {
     ok(cert.publicKey.verify(data, Buffer.from(signature, 'hex'), 'sha256'))
   })
 
-  it('should support ed25519', function () {
+  it('should support ed25519: sha256WithRSAEncryption sign', function () {
     const publicKey = PublicKey.fromPEM(fs.readFileSync('./test/cert/ed25519-key-public.pem'))
     const privateKey = PrivateKey.fromPEM(fs.readFileSync('./test/cert/ed25519-key-simple.pem'))
     const fullPrivateKey = PrivateKey.fromPEM(fs.readFileSync('./test/cert/ed25519-key-full.pem'))
@@ -49,7 +49,7 @@ suite('PKI', function () {
     ok(publicKey.verify(data, privateKey.sign(data, 'sha512'), 'sha512'))
   })
 
-  it('should support ed25519 certificate', function () {
+  it('should support ed25519 certificate: sha256WithRSAEncryption sign', function () {
     const cert = Certificate.fromPEM(fs.readFileSync('./test/cert/ed25519-server-cert.pem'))
     const privateKey = PrivateKey.fromPEM(fs.readFileSync('./test/cert/ed25519-server-key.pem'))
 
@@ -72,4 +72,31 @@ suite('PKI', function () {
     ok(certcli.publicKey.verify(data, signaturecli, 'sha512'))
     ok(cert.publicKey.verify(data, signaturecli, 'sha512') === false)
   })
+
+
+  it('should support ed25519 certificate: ed25519 sign', function () {
+    const cert = Certificate.fromPEM(fs.readFileSync('./test/cert/CA_ED25519_Root.pem'))
+    const privateKey = PrivateKey.fromPEM(fs.readFileSync('./test/cert/CA_ED25519_Root.key'))
+
+    strictEqual(cert.publicKey.keyRaw.length, 32)
+    strictEqual(privateKey.keyRaw.length, 64)
+    strictEqual(privateKey.algo, 'Ed25519')
+
+    const data = Buffer.allocUnsafe(100)
+    const signature = privateKey.sign(data, 'sha256')
+    ok(cert.publicKey.verify(data, signature, 'sha256'))
+
+    const certcli = Certificate.fromPEM(fs.readFileSync('./test/cert/CA_ED25519_Sign.pem'))
+    const privateKeycli = PrivateKey.fromPEM(fs.readFileSync('./test/cert/CA_ED25519_Sign.key'))
+
+    strictEqual(certcli.publicKey.keyRaw.length, 32)
+    strictEqual(privateKeycli.keyRaw.length, 64)
+    strictEqual(privateKeycli.algo, 'Ed25519')
+
+    const signaturecli = privateKeycli.sign(data, 'sha512')
+    ok(certcli.publicKey.verify(data, signaturecli, 'sha512'))
+    ok(cert.publicKey.verify(data, signaturecli, 'sha512') === false)
+  })
+
+
 })
